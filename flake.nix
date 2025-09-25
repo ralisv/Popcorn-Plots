@@ -5,19 +5,26 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs =
+    { self, nixpkgs }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
-      python-with-packages = pkgs.python3.withPackages (ps: with ps; [
-        pandas
-        matplotlib
-        seaborn
-        jupyterlab
-        ipython
-        numpy
-      ]);
+      python-with-packages = pkgs.python3.withPackages (
+        ps: with ps; [
+          ipykernel
+          jupyterlab
+          matplotlib
+          notebook
+          numpy
+          pandas
+          pip
+          pooch
+          seaborn
+          tqdm
+        ]
+      );
     in
     {
       # The development shell for the specified system
