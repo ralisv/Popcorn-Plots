@@ -7,14 +7,11 @@ def main() -> None:
     print("Loading MovieLens 32M dataset...")
     ml32m = load_movie_lens_32m()
 
-    print("Movies:")
-    print(ml32m.movies)
-
     print("Ratings:")
     print(ml32m.ratings)
 
-    print("Tags:")
-    print(ml32m.tags)
+    print("Links:")
+    print(ml32m.links)
 
     print("\nLoading IMDB dataset...")
     imdb = load_imdb()

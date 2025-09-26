@@ -10,9 +10,7 @@ import tqdm
 @dataclass(frozen=True, kw_only=True, slots=True)
 class MovieLens32M:
     links: pl.DataFrame
-    movies: pl.DataFrame
     ratings: pl.DataFrame
-    tags: pl.DataFrame
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -70,10 +68,7 @@ def load_movie_lens_32m() -> MovieLens32M:
 
     return MovieLens32M(
         links=_read_csv(_get_path(file_paths, "links.csv")),
-        movies=_read_csv(_get_path(file_paths, "movies.csv")),
         ratings=_read_csv(_get_path(file_paths, "ratings.csv")),
-        # TODO: do we even need this? if not, remove
-        tags=_read_csv(_get_path(file_paths, "tags.csv")),
     )
 
 
