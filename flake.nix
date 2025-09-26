@@ -18,8 +18,8 @@
           matplotlib
           notebook
           numpy
-          pandas
           pip
+          polars
           pooch
           seaborn
           tqdm

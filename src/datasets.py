@@ -1,22 +1,23 @@
+from collections.abc import Sequence
 import pathlib
 from typing import Iterable, cast
 import pooch  # pyright: ignore[reportMissingTypeStubs]
 from dataclasses import dataclass
-import pandas as pd
+import polars as pl
 import tqdm
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class MovieLens32M:
-    links: pd.DataFrame
-    movies: pd.DataFrame
-    ratings: pd.DataFrame
-    tags: pd.DataFrame
+    links: pl.DataFrame
+    movies: pl.DataFrame
+    ratings: pl.DataFrame
+    tags: pl.DataFrame
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class Imdb:
-    title_basics: pd.DataFrame
+    title_basics: pl.DataFrame
 
 
 def _get_path(file_paths: Iterable[str], name: str) -> pathlib.Path:
@@ -24,29 +25,36 @@ def _get_path(file_paths: Iterable[str], name: str) -> pathlib.Path:
 
 
 def _read_csv(
-    file_path: pathlib.Path, *, chunk_size: int = 100_000, sep: str = ","
-) -> pd.DataFrame:
+    file_path: pathlib.Path,
+    *,
+    separator: str = ",",
+    quote_char: str | None = '"',
+    null_values: str | Sequence[str] | None = None,
+) -> pl.DataFrame:
     with file_path.open() as f:
         total_lines = sum(1 for _ in f) - 1
 
-    chunks: list[pd.DataFrame] = []
+    reader = pl.read_csv_batched(
+        file_path,
+        separator=separator,
+        quote_char=quote_char,
+        null_values=null_values,
+    )
+
+    chunks: list[pl.DataFrame] = []
 
     with tqdm.tqdm(
         total=total_lines,
         desc=f"Parsing {file_path.name}",
         leave=False,
-        unit=" klines",
-        unit_scale=1e-3,
+        unit=" lines",
     ) as pbar:
-        for chunk in cast(
-            pd.DataFrame,
-            pd.read_csv(file_path, chunksize=chunk_size, sep=sep),  # pyright: ignore[reportUnknownMemberType]
-        ):
-            df_chunk = cast(pd.DataFrame, chunk)
-            chunks.append(df_chunk)
-            pbar.update(len(df_chunk))
+        while batches := reader.next_batches(1):
+            for df_chunk in batches:
+                chunks.append(df_chunk)
+                pbar.update(df_chunk.height)
 
-    return pd.concat(chunks, ignore_index=True)
+    return pl.concat(chunks)
 
 
 def load_movie_lens_32m() -> MovieLens32M:
@@ -55,7 +63,7 @@ def load_movie_lens_32m() -> MovieLens32M:
         pooch.retrieve(  # pyright: ignore[reportUnknownMemberType]
             url="https://files.grouplens.org/datasets/movielens/ml-32m.zip",
             known_hash="md5:d472be332d4daa821edc399621853b57",
-            processor=pooch.Unzip(),  # pyright: ignore[reportUnknownMemberType]
+            processor=pooch.Unzip(),
             progressbar=True,
         ),
     )
@@ -64,6 +72,7 @@ def load_movie_lens_32m() -> MovieLens32M:
         links=_read_csv(_get_path(file_paths, "links.csv")),
         movies=_read_csv(_get_path(file_paths, "movies.csv")),
         ratings=_read_csv(_get_path(file_paths, "ratings.csv")),
+        # TODO: do we even need this? if not, remove
         tags=_read_csv(_get_path(file_paths, "tags.csv")),
     )
 
@@ -75,10 +84,12 @@ def load_imdb() -> Imdb:
             pooch.retrieve(  # pyright: ignore[reportUnknownMemberType]
                 url="https://datasets.imdbws.com/title.basics.tsv.gz",
                 known_hash="sha256:d0c128601f22cf30a071d6605c2a2b1a2a5303ad9b41fca0bbe2c3ff39d9d1e7",
-                processor=pooch.Decompress(),  # pyright: ignore[reportUnknownMemberType]
+                processor=pooch.Decompress(),
                 progressbar=True,
             ),
         )
     )
 
-    return Imdb(title_basics=_read_csv(path, sep="\t"))
+    return Imdb(
+        title_basics=_read_csv(path, separator="\t", quote_char=None, null_values=r"\N")
+    )
