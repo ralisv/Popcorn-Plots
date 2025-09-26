@@ -83,7 +83,7 @@ def load_imdb() -> Imdb:
             str,
             pooch.retrieve(  # pyright: ignore[reportUnknownMemberType]
                 url="https://datasets.imdbws.com/title.basics.tsv.gz",
-                known_hash="sha256:d0c128601f22cf30a071d6605c2a2b1a2a5303ad9b41fca0bbe2c3ff39d9d1e7",
+                known_hash=None,
                 processor=pooch.Decompress(),
                 progressbar=True,
             ),
