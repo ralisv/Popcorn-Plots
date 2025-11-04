@@ -1,0 +1,53 @@
+default_install_hook_types:
+  - pre-commit
+  - post-checkout
+  - post-merge
+
+fail_fast: false
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--enforce-all"]
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-illegal-windows-names
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: bun-lint
+        name: bun lint
+        entry: bun lint
+        language: system
+        pass_filenames: false
+
+      - id: bun-format
+        name: bun format
+        entry: bun format
+        language: system
+        pass_filenames: false
+
+      - id: bun-typecheck
+        name: bun typecheck
+        entry: bun typecheck
+        language: system
+        pass_filenames: false
+
+      - id: bun-install
+        name: run bun install after checkout
+        entry: bun install
+        language: system
+        stages: [post-checkout, post-merge]
+        always_run: true

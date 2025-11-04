@@ -1,4 +1,12 @@
 {
-    "nixEnvSelector.useFlakes": true,
-    "nixEnvSelector.nixFile": "${workspaceFolder}/flake.nix",
+  "nixEnvSelector.useFlakes": true,
+  "nixEnvSelector.nixFile": "${workspaceFolder}/flake.nix",
+  "task.autoDetect": "off",
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[nix]": {
+    "editor.defaultFormatter": "jnoortheen.nix-ide"
+  },
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  }
 }

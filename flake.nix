@@ -1,6 +1,4 @@
 {
-  description = "A Nix flake for a Python data visualization environment on NixOS";
-
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
@@ -27,11 +25,18 @@
       );
     in
     {
-      # The development shell for the specified system
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = [
           python-with-packages
-        ];
+        ]
+        ++ (with pkgs; [
+          bun
+          pre-commit
+        ]);
       };
+
+      shellHook = ''
+        pre-commit install
+      '';
     };
 }

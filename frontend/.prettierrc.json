@@ -1,0 +1,10 @@
+{
+  "objectWrap": "collapse",
+  "plugins": [
+    "prettier-plugin-jsdoc",
+    "prettier-plugin-organize-attributes",
+    "prettier-plugin-organize-imports",
+    "prettier-plugin-package",
+    "prettier-plugin-sh"
+  ]
+}
