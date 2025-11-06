@@ -25,7 +25,6 @@ export function App(): React.ReactElement {
         </p>
       </header>
 
-
       <main className="flex-grow p-8">
         <Sociogram />
       </main>

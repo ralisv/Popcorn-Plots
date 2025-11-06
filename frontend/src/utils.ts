@@ -1,6 +1,6 @@
 /**
  * Converts a full name into a display name format (e.g., "John Doe" -> "J. Doe").
- * 
+ *
  * @param fullName - The full name to convert.
  * @returns The display name composed of the first initial and last name.
  */

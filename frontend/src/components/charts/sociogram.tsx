@@ -138,7 +138,7 @@ export function Sociogram({
         d3.select(this).attr("r", 22);
       })
       .on("mouseleave", function () {
-        d3.select(this).attr("r", 18); 
+        d3.select(this).attr("r", 18);
       });
 
     const labelSel = labelLayer

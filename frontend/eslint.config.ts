@@ -5,12 +5,13 @@ import eslintConfigPrettier from "eslint-config-prettier";
 import onlyWarn from "eslint-plugin-only-warn";
 import perfectionist from "eslint-plugin-perfectionist";
 import react from "eslint-plugin-react";
+import { defineConfig } from "eslint/config";
 import { fileURLToPath } from "node:url";
 import tseslint from "typescript-eslint";
 
 const gitignorePath = fileURLToPath(new URL(".gitignore", import.meta.url));
 
-export default tseslint.config(
+export default defineConfig(
   includeIgnoreFile(gitignorePath),
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
