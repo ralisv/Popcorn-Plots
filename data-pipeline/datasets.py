@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import polars as pl
 import tqdm
 import json
-from typing import Dict, Any, Set
+from typing import Any, Set
 import polars as pl
 
 
@@ -190,9 +190,9 @@ def process_movies_to_json(
     
     print(f"Fetching ratings for {len(movie_ids)} movies...")
     ratings = ml_data.ratings.filter(pl.col("movieId").is_in(movie_ids))
-    
-    # Build result dictionary
-    result: Dict[str, Any] = {}
+
+    # Build result list
+    result: list[Any] = []
     
     print("Building JSON structure...")
     for row in movies_with_imdb.iter_rows(named=True):
@@ -237,9 +237,9 @@ def process_movies_to_json(
         # Remove None values and empty strings
         movie_obj = {k: v for k, v in movie_obj.items() 
                     if v is not None and v != "" and v != "\\N"}
-        
-        result[tconst] = movie_obj
-    
+
+        result.append(movie_obj)
+
     # Write to JSON file
     print(f"Writing {len(result)} movies to {output_file}...")
     output_path = Path(output_file)
