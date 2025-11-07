@@ -123,6 +123,12 @@ export function Sociogram({
       .domain([0, d3.max(dataLinks, (d) => d.value) ?? 1])
       .range(LINK_STRENGTH_RANGE);
 
+    // Scale for highlighted link color based on connection strength
+    const linkHighlightColorScale = d3
+      .scaleLinear<string>()
+      .domain([0, d3.max(dataLinks, (d) => d.value) ?? 1])
+      .range(["gray", "lightgray"]);
+
     const linkSel = linkLayer
       .selectAll<SVGLineElement, GenreLinkDatum>("line")
       .data(
@@ -134,7 +140,7 @@ export function Sociogram({
       )
       .join("line")
       .attr("stroke", "var(--color-border)")
-      .attr("stroke-opacity", 0.4)
+      .attr("stroke-opacity", 0.6)
       .attr("stroke-width", (d) => linkWidthScale(d.value));
 
     // Scale for node size based on movie count
@@ -171,7 +177,7 @@ export function Sociogram({
             const targetId =
               typeof link.target === "string" ? link.target : link.target.id;
             return sourceId === d.id || targetId === d.id
-              ? "lightgray"
+              ? linkHighlightColorScale(link.value)
               : "var(--color-border)";
           })
           .attr("stroke-opacity", (link) => {
