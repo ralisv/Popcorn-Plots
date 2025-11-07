@@ -2,6 +2,32 @@ import { Card, CardBody } from "@heroui/react";
 import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+// --- Simulation Constants ---
+
+/** The minimum and maximum width of the links between genres. */
+const LINK_WIDTH_RANGE: [number, number] = [1, 10];
+
+/** The minimum and maximum strength of the links' gravitational pull. */
+const LINK_STRENGTH_RANGE: [number, number] = [0.05, 1];
+
+/** The strength of the charge force between nodes. A negative value pushes nodes apart. */
+const NODE_CHARGE_STRENGTH = -800;
+
+/** The target distance between linked nodes. */
+const LINK_DISTANCE = 120;
+
+/** The padding around each node to prevent overlapping. */
+const NODE_COLLISION_PADDING = 10;
+
+/** The minimum and maximum radius of the nodes. */
+const NODE_SIZE_RANGE: [number, number] = [12, 40];
+
+/** The minimum and maximum zoom level. */
+const ZOOM_EXTENT: [number, number] = [0.1, 8];
+
+/** The alpha target for the simulation when a node is being dragged. */
+const DRAG_ALPHA_TARGET = 0.3;
+
 export interface SociogramProps {
   className?: string;
   links?: GenreLinkDatum[];
@@ -15,9 +41,9 @@ interface GenreLinkDatum extends d3.SimulationLinkDatum<GenreNodeDatum> {
 }
 
 interface GenreNodeDatum extends d3.SimulationNodeDatum {
-  id: string; // Genre name
-  count: number; // Number of movies in this genre
   avgRating?: number; // Average rating for movies in this genre
+  count: number; // Number of movies in this genre
+  id: string; // Genre name
 }
 
 export function Sociogram({
@@ -74,7 +100,7 @@ export function Sociogram({
 
     const zoomBehavior = d3
       .zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 8])
+      .scaleExtent(ZOOM_EXTENT)
       .on("zoom", (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
         g.attr("transform", event.transform.toString());
       });
@@ -89,14 +115,22 @@ export function Sociogram({
     const linkWidthScale = d3
       .scaleLinear()
       .domain([0, d3.max(dataLinks, (d) => d.value) ?? 1])
-      .range([1, 5]);
+      .range(LINK_WIDTH_RANGE);
+
+    // Scale for link strength based on connection value
+    const linkStrengthScale = d3
+      .scaleLinear()
+      .domain([0, d3.max(dataLinks, (d) => d.value) ?? 1])
+      .range(LINK_STRENGTH_RANGE);
 
     const linkSel = linkLayer
       .selectAll<SVGLineElement, GenreLinkDatum>("line")
       .data(
         dataLinks,
         ({ source, target }) =>
-          `${typeof source === "string" ? source : source.id}-${typeof target === "string" ? target : target.id}`,
+          `${typeof source === "string" ? source : source.id}-${
+            typeof target === "string" ? target : target.id
+          }`,
       )
       .join("line")
       .attr("stroke", "var(--color-border)")
@@ -107,7 +141,7 @@ export function Sociogram({
     const nodeSizeScale = d3
       .scaleSqrt()
       .domain([0, d3.max(dataNodes, (d) => d.count) ?? 1])
-      .range([12, 40]);
+      .range(NODE_SIZE_RANGE);
 
     // Color scale based on genre name hash (for consistent colors)
     const colorScale = d3
@@ -124,12 +158,49 @@ export function Sociogram({
       .attr("stroke", "var(--color-card)")
       .attr("stroke-width", 2)
       .attr("class", "transition-all duration-200 ease-out cursor-pointer")
-      .on("mouseenter", function (event, d) {
+      .on("mouseenter", function (_event, d) {
+        // Enlarge the hovered node
         const currentRadius = nodeSizeScale(d.count);
         d3.select(this).attr("r", currentRadius * 1.2);
+
+        // Highlight connected links
+        linkSel
+          .attr("stroke", (link) => {
+            const sourceId =
+              typeof link.source === "string" ? link.source : link.source.id;
+            const targetId =
+              typeof link.target === "string" ? link.target : link.target.id;
+            return sourceId === d.id || targetId === d.id
+              ? "white"
+              : "var(--color-border)";
+          })
+          .attr("stroke-opacity", (link) => {
+            const sourceId =
+              typeof link.source === "string" ? link.source : link.source.id;
+            const targetId =
+              typeof link.target === "string" ? link.target : link.target.id;
+            return sourceId === d.id || targetId === d.id ? 1 : 0.1;
+          })
+          .attr("stroke-width", (link) => {
+            const sourceId =
+              typeof link.source === "string" ? link.source : link.source.id;
+            const targetId =
+              typeof link.target === "string" ? link.target : link.target.id;
+            const baseWidth = linkWidthScale(link.value);
+            return sourceId === d.id || targetId === d.id
+              ? baseWidth * 2
+              : baseWidth;
+          });
       })
-      .on("mouseleave", function (event, d) {
+      .on("mouseleave", function (_event, d) {
+        // Restore node size
         d3.select(this).attr("r", nodeSizeScale(d.count));
+
+        // Restore link appearance
+        linkSel
+          .attr("stroke", "var(--color-border)")
+          .attr("stroke-opacity", 0.4)
+          .attr("stroke-width", (link) => linkWidthScale(link.value));
       });
 
     // Add tooltips on hover
@@ -137,7 +208,9 @@ export function Sociogram({
       .append("title")
       .text(
         (d) =>
-          `${d.id}\nMovies: ${d.count}${d.avgRating ? `\nAvg Rating: ${d.avgRating.toFixed(1)}` : ""}`,
+          `${d.id}\nMovies: ${d.count}${
+            d.avgRating ? `\nAvg Rating: ${d.avgRating.toFixed(1)}` : ""
+          }`,
       );
 
     const labelSel = labelLayer
@@ -160,16 +233,16 @@ export function Sociogram({
         d3
           .forceLink<GenreNodeDatum, GenreLinkDatum>(dataLinks)
           .id((d) => d.id)
-          .distance(120)
-          .strength(0.5),
+          .distance(LINK_DISTANCE)
+          .strength((d) => linkStrengthScale(d.value)),
       )
-      .force("charge", d3.forceManyBody().strength(-400))
+      .force("charge", d3.forceManyBody().strength(NODE_CHARGE_STRENGTH))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force(
         "collide",
         d3
           .forceCollide<GenreNodeDatum>()
-          .radius((d) => nodeSizeScale(d.count) + 10),
+          .radius((d) => nodeSizeScale(d.count) + NODE_COLLISION_PADDING),
       )
       .on("tick", () => {
         linkSel
@@ -196,7 +269,7 @@ export function Sociogram({
     const dragBehavior = d3
       .drag<SVGCircleElement, GenreNodeDatum>()
       .on("start", (event, d) => {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
+        if (!event.active) simulation.alphaTarget(DRAG_ALPHA_TARGET).restart();
         d.fx = d.x;
         d.fy = d.y;
       })

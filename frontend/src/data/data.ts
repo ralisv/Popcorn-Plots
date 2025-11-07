@@ -62,12 +62,12 @@ export function getGenreNetworkData(): {
 
   // Process each movie
   movies.forEach((movie) => {
-    const movieGenres = movie.genres || [];
+    const movieGenres = movie.genres;
     const avgRating = calculateAvgRating(movie.reviews);
 
     // Update genre statistics
     movieGenres.forEach((genre) => {
-      const stats = genreStats.get(genre) || {
+      const stats = genreStats.get(genre) ?? {
         count: 0,
         reviewCount: 0,
         totalRating: 0,
@@ -88,7 +88,7 @@ export function getGenreNetworkData(): {
         const key =
           genre1 < genre2 ? `${genre1}|${genre2}` : `${genre2}|${genre1}`;
 
-        coOccurrences.set(key, (coOccurrences.get(key) || 0) + 1);
+        coOccurrences.set(key, (coOccurrences.get(key) ?? 0) + 1);
       }
     }
   });
@@ -128,7 +128,7 @@ export function getGenreStats(genreName: string): {
   const movies = getMovies();
 
   const genreMovies = movies.filter((movie) =>
-    movie.genres?.includes(genreName),
+    movie.genres.includes(genreName),
   );
 
   const avgRating =
