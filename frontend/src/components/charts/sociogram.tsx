@@ -171,7 +171,7 @@ export function Sociogram({
             const targetId =
               typeof link.target === "string" ? link.target : link.target.id;
             return sourceId === d.id || targetId === d.id
-              ? "white"
+              ? "lightgray"
               : "var(--color-border)";
           })
           .attr("stroke-opacity", (link) => {
@@ -179,7 +179,7 @@ export function Sociogram({
               typeof link.source === "string" ? link.source : link.source.id;
             const targetId =
               typeof link.target === "string" ? link.target : link.target.id;
-            return sourceId === d.id || targetId === d.id ? 1 : 0.1;
+            return sourceId === d.id || targetId === d.id ? 1 : 0.5;
           })
           .attr("stroke-width", (link) => {
             const sourceId =
