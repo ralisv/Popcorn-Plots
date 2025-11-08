@@ -66,6 +66,14 @@ export function Sociogram({
     };
   }, [nodes, links]);
 
+  const { ratingExtent, useRatingColorScale } = useMemo(() => {
+    const ratingExtent = d3.extent(
+      dataNodes.flatMap((d) => (d.avgRating ? [d.avgRating] : [])),
+    );
+    const useRatingColorScale = ratingExtent[0] !== undefined;
+    return { ratingExtent, useRatingColorScale };
+  }, [dataNodes]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -152,8 +160,12 @@ export function Sociogram({
       .domain([0, d3.max(dataNodes, (d) => d.count) ?? 1])
       .range(NODE_SIZE_RANGE);
 
-    // Color scale based on genre name hash (for consistent colors)
-    const colorScale = d3
+    // Color scale based on average rating
+    const ratingColorScale = d3
+      .scaleSequential(d3.interpolateRdYlGn)
+      .domain(ratingExtent as [number, number]);
+
+    const genreColorScale = d3
       .scaleOrdinal<string>()
       .domain(dataNodes.map((d) => d.id))
       .range(chartColors);
@@ -163,11 +175,16 @@ export function Sociogram({
       .data(dataNodes, (d) => d.id)
       .join("circle")
       .attr("r", (d) => nodeSizeScale(d.count))
-      .attr("fill", (d) => colorScale(d.id))
+      .attr("fill", (d) => {
+        if (useRatingColorScale && d.avgRating) {
+          return ratingColorScale(d.avgRating);
+        }
+        return genreColorScale(d.id);
+      })
       .attr("stroke", "var(--color-card)")
       .attr("stroke-width", 2)
       .attr("class", "transition-all duration-200 ease-out cursor-pointer")
-            .on("mouseenter", function (_event, d) {
+      .on("mouseenter", function (_event, d) {
         // Enlarge the hovered node
         const currentRadius = nodeSizeScale(d.count);
         d3.select(this)
@@ -331,6 +348,26 @@ export function Sociogram({
       >
         <g ref={gRef} />
       </svg>
+
+      {useRatingColorScale && ratingExtent[0] && ratingExtent[1] && (
+        <Card className="pointer-events-none absolute bottom-4 left-4">
+          <CardBody className="p-3">
+            <p className="text-xs mb-2">Avg. Movie Rating</p>
+            <div
+              className="w-full h-4 rounded-sm"
+              style={{
+                background: `linear-gradient(to right, ${d3.interpolateRdYlGn(
+                  0,
+                )}, ${d3.interpolateRdYlGn(0.5)}, ${d3.interpolateRdYlGn(1)})`,
+              }}
+            />
+            <div className="flex justify-between text-xs mt-1">
+              <span>{ratingExtent[0].toFixed(1)}</span>
+              <span>{ratingExtent[1].toFixed(1)}</span>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {dataNodes.length > 0 && (
         <Card className="pointer-events-none absolute bottom-4 right-4">
