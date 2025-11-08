@@ -2,21 +2,54 @@ import { Card, CardBody } from "@heroui/react";
 import * as d3 from "d3";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+// --- Simulation Constants ---
+
+/** The minimum and maximum width of the links between genres. */
+const LINK_WIDTH_RANGE: [number, number] = [1, 10];
+
+/** The minimum and maximum opacity for links. */
+const LINK_OPACITY_RANGE: [number, number] = [0.2, 0.8];
+
+/** The minimum and maximum strength of the links' gravitational pull. */
+const LINK_STRENGTH_RANGE: [number, number] = [0.05, 1];
+
+/** The strength of the charge force between nodes. A negative value pushes nodes apart. */
+const NODE_CHARGE_STRENGTH = -800;
+
+/** The target distance between linked nodes. */
+const LINK_DISTANCE = 120;
+
+/** The padding around each node to prevent overlapping. */
+const NODE_COLLISION_PADDING = 10;
+
+/** The minimum and maximum radius of the nodes. */
+const NODE_SIZE_RANGE: [number, number] = [12, 40];
+
+/** The minimum and maximum zoom level. */
+const ZOOM_EXTENT: [number, number] = [0.1, 8];
+
+/** The alpha target for the simulation when a node is being dragged. */
+const DRAG_ALPHA_TARGET = 0.3;
+
+/** The duration of the hover transition in milliseconds. */
+const HOVER_TRANSITION_DURATION = 300;
+
 export interface SociogramProps {
   className?: string;
-  links?: LinkDatum[];
-  nodes?: NodeDatum[];
+  links?: GenreLinkDatum[];
+  nodes?: GenreNodeDatum[];
 }
 
-interface LinkDatum extends d3.SimulationLinkDatum<NodeDatum> {
-  source: NodeDatum | string;
-  target: NodeDatum | string;
+interface GenreLinkDatum extends d3.SimulationLinkDatum<GenreNodeDatum> {
+  source: GenreNodeDatum | string;
+  target: GenreNodeDatum | string;
   value: number;
 }
 
-interface NodeDatum extends d3.SimulationNodeDatum {
-  group: number;
-  id: string;
+interface GenreNodeDatum extends d3.SimulationNodeDatum {
+  avgRating?: number; // Average rating for movies in this genre
+  count: number; // Number of movies in this genre
+  id: string; // Genre name
 }
 
 export function Sociogram({
@@ -30,36 +63,19 @@ export function Sociogram({
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
 
   const { dataLinks, dataNodes } = useMemo(() => {
-    const fallbackNodes: NodeDatum[] = [
-      { group: 1, id: "Alice" },
-      { group: 2, id: "Bob" },
-      { group: 1, id: "Carol" },
-      { group: 3, id: "David" },
-      { group: 2, id: "Eve" },
-      { group: 3, id: "Frank" },
-      { group: 1, id: "Grace" },
-      { group: 2, id: "Heidi" },
-      { group: 3, id: "Ivan" },
-      { group: 1, id: "Judy" },
-    ];
-    const fallbackLinks: LinkDatum[] = [
-      { source: "Alice", target: "Bob", value: 2 },
-      { source: "Alice", target: "Carol", value: 5 },
-      { source: "Bob", target: "David", value: 1 },
-      { source: "Carol", target: "Eve", value: 3 },
-      { source: "David", target: "Frank", value: 1 },
-      { source: "Eve", target: "Grace", value: 4 },
-      { source: "Frank", target: "Alice", value: 1 },
-      { source: "Grace", target: "Heidi", value: 2 },
-      { source: "Heidi", target: "Ivan", value: 1 },
-      { source: "Ivan", target: "Judy", value: 3 },
-      { source: "Judy", target: "Alice", value: 2 },
-    ];
     return {
-      dataLinks: (links ?? fallbackLinks).map((l) => ({ ...l })),
-      dataNodes: (nodes ?? fallbackNodes).map((n) => ({ ...n })),
+      dataLinks: (links ?? []).map((l) => ({ ...l })),
+      dataNodes: (nodes ?? []).map((n) => ({ ...n })),
     };
   }, [nodes, links]);
+
+  const { ratingExtent, useRatingColorScale } = useMemo(() => {
+    const ratingExtent = d3.extent(
+      dataNodes.flatMap((d) => (d.avgRating ? [d.avgRating] : [])),
+    );
+    const useRatingColorScale = ratingExtent[0] !== undefined;
+    return { ratingExtent, useRatingColorScale };
+  }, [dataNodes]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -81,6 +97,7 @@ export function Sociogram({
   useEffect(() => {
     const { height, width } = dimensions;
     if (!svgRef.current || !gRef.current || width === 0 || height === 0) return;
+    if (dataNodes.length === 0) return; // Don't render if no data
 
     const svg = d3.select(svgRef.current);
     const g = d3.select(gRef.current);
@@ -97,7 +114,7 @@ export function Sociogram({
 
     const zoomBehavior = d3
       .zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 8])
+      .scaleExtent(ZOOM_EXTENT)
       .on("zoom", (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
         g.attr("transform", event.transform.toString());
       });
@@ -108,63 +125,199 @@ export function Sociogram({
     const nodeLayer = g.append("g").attr("data-layer", "nodes");
     const labelLayer = g.append("g").attr("data-layer", "labels");
 
+    const getNodeId = (node: GenreNodeDatum | string): string =>
+      typeof node === "string" ? node : node.id;
+
+    const isLinkConnectedToNode = (
+      link: GenreLinkDatum,
+      nodeId: string,
+    ): boolean =>
+      getNodeId(link.source) === nodeId || getNodeId(link.target) === nodeId;
+
+    const maxLinkValue = d3.max(dataLinks, (d) => d.value) ?? 1;
+
+    // Scale for link width based on connection strength
+    const linkWidthScale = d3
+      .scaleLinear()
+      .domain([0, maxLinkValue])
+      .range(LINK_WIDTH_RANGE);
+
+    // Scale for link strength based on connection value
+    const linkStrengthScale = d3
+      .scaleLinear()
+      .domain([0, maxLinkValue])
+      .range(LINK_STRENGTH_RANGE);
+
+    // Scale for highlighted link color based on connection strength
+    const linkHighlightColorScale = d3
+      .scaleLinear<string>()
+      .domain([0, maxLinkValue])
+      .range(["gray", "lightgray"]);
+
+    const linkOpacityScale = d3
+      .scaleLinear()
+      .domain([0, maxLinkValue])
+      .range(LINK_OPACITY_RANGE);
+
     const linkSel = linkLayer
-      .selectAll<SVGLineElement, LinkDatum>("line")
+      .selectAll<SVGLineElement, GenreLinkDatum>("line")
       .data(
         dataLinks,
         ({ source, target }) =>
-          `${typeof source === "string" ? source : source.id}-${typeof target === "string" ? target : target.id}`,
+          `${typeof source === "string" ? source : source.id}-${
+            typeof target === "string" ? target : target.id
+          }`,
       )
       .join("line")
       .attr("stroke", "var(--color-border)")
-      .attr("stroke-opacity", 0.6)
-      .attr("stroke-width", (d) => Math.max(1, Math.sqrt(d.value)));
+      .attr("stroke-opacity", (d) => linkOpacityScale(d.value))
+      .attr("stroke-width", (d) => linkWidthScale(d.value));
+
+    // Scale for node size based on movie count
+    const nodeSizeScale = d3
+      .scaleSqrt()
+      .domain([0, d3.max(dataNodes, (d) => d.count) ?? 1])
+      .range(NODE_SIZE_RANGE);
+
+    // Color scale based on average rating
+    const ratingColorScale = d3
+      .scaleSequential(d3.interpolateRdYlGn)
+      .domain(ratingExtent as [number, number]);
+
+    const genreColorScale = d3
+      .scaleOrdinal<string>()
+      .domain(dataNodes.map((d) => d.id))
+      .range(chartColors);
 
     const nodeSel = nodeLayer
-      .selectAll<SVGCircleElement, NodeDatum>("circle")
+      .selectAll<SVGCircleElement, GenreNodeDatum>("circle")
       .data(dataNodes, (d) => d.id)
       .join("circle")
-      .attr("r", 18)
-      .attr(
-        "fill",
-        (d) =>
-          chartColors[(d.group - 1) % chartColors.length] ??
-          "var(--color-accent)",
-      )
-      .attr("stroke", "var(--color-card)")
-      .attr("stroke-width", 1.5)
-      .attr("class", "transition-all duration-200 ease-out")
-      .on("mouseenter", function () {
-        d3.select(this).attr("r", 22);
+      .attr("r", (d) => nodeSizeScale(d.count))
+      .attr("fill", (d) => {
+        if (useRatingColorScale && d.avgRating) {
+          return ratingColorScale(d.avgRating);
+        }
+        return genreColorScale(d.id);
       })
-      .on("mouseleave", function () {
-        d3.select(this).attr("r", 18);
+      .attr("stroke", "var(--color-card)")
+      .attr("stroke-width", 2)
+      .attr("class", "transition-all duration-200 ease-out cursor-pointer")
+      .on("mouseenter", function (_event, d) {
+        // Enlarge the hovered node
+        const currentRadius = nodeSizeScale(d.count);
+        d3.select(this)
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("r", currentRadius * 1.2);
+
+        // Highlight connected links
+        const connectedLinks = dataLinks.filter((link) =>
+          isLinkConnectedToNode(link, d.id),
+        );
+        const localMax = d3.max(connectedLinks, (link) => link.value) ?? 0;
+
+        linkSel
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("stroke", (link) => {
+            return isLinkConnectedToNode(link, d.id)
+              ? linkHighlightColorScale(link.value)
+              : "var(--color-border)";
+          })
+          .attr("stroke-opacity", (link) => {
+            if (!isLinkConnectedToNode(link, d.id)) {
+              return linkOpacityScale(link.value) * 0.25;
+            }
+
+            if (localMax <= 0) {
+              return 1;
+            }
+
+            const relativeStrength = link.value / localMax;
+
+            return d3.interpolateNumber(
+              LINK_OPACITY_RANGE[0],
+              1,
+            )(relativeStrength);
+          })
+          .attr("stroke-width", (link) => {
+            const baseWidth = linkWidthScale(link.value);
+
+            if (!isLinkConnectedToNode(link, d.id)) {
+              return baseWidth * 0.6;
+            }
+
+            if (localMax <= 0) {
+              return Math.max(baseWidth, LINK_WIDTH_RANGE[1]);
+            }
+
+            const relativeStrength = link.value / localMax;
+            const normalizedWidth = d3.interpolateNumber(
+              LINK_WIDTH_RANGE[0],
+              LINK_WIDTH_RANGE[1] * 1.2,
+            )(relativeStrength);
+
+            return Math.max(baseWidth, normalizedWidth);
+          });
+      })
+      .on("mouseleave", function (_event, d) {
+        // Restore node size
+        d3.select(this)
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("r", nodeSizeScale(d.count));
+
+        // Restore link appearance
+        linkSel
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("stroke", "var(--color-border)")
+          .attr("stroke-opacity", (link) => linkOpacityScale(link.value))
+          .attr("stroke-width", (link) => linkWidthScale(link.value));
       });
 
+    // Add tooltips on hover
+    nodeSel
+      .append("title")
+      .text(
+        (d) =>
+          `${d.id}\nMovies: ${d.count}${
+            d.avgRating ? `\nAvg Rating: ${d.avgRating.toFixed(1)}` : ""
+          }`,
+      );
+
     const labelSel = labelLayer
-      .selectAll<SVGTextElement, NodeDatum>("text")
+      .selectAll<SVGTextElement, GenreNodeDatum>("text")
       .data(dataNodes, (d) => d.id)
       .join("text")
       .text((d) => d.id)
-      .attr("font-size", 12)
+      .attr("font-size", 11)
+      .attr("font-weight", 600)
       .attr("dy", 4)
       .attr("text-anchor", "middle")
       .attr("fill", "var(--color-foreground)")
-      .attr("pointer-events", "none");
+      .attr("pointer-events", "none")
+      .attr("class", "select-none");
 
     const simulation = d3
-      .forceSimulation<NodeDatum>(dataNodes)
+      .forceSimulation<GenreNodeDatum>(dataNodes)
       .force(
         "link",
         d3
-          .forceLink<NodeDatum, LinkDatum>(dataLinks)
+          .forceLink<GenreNodeDatum, GenreLinkDatum>(dataLinks)
           .id((d) => d.id)
-          .distance(110)
-          .strength(0.6),
+          .distance(LINK_DISTANCE)
+          .strength((d) => linkStrengthScale(d.value)),
       )
-      .force("charge", d3.forceManyBody().strength(-320))
+      .force("charge", d3.forceManyBody().strength(NODE_CHARGE_STRENGTH))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide<NodeDatum>().radius(28))
+      .force(
+        "collide",
+        d3
+          .forceCollide<GenreNodeDatum>()
+          .radius((d) => nodeSizeScale(d.count) + NODE_COLLISION_PADDING),
+      )
       .on("tick", () => {
         linkSel
           .attr("x1", (d) =>
@@ -182,13 +335,15 @@ export function Sociogram({
 
         nodeSel.attr("cx", (d) => d.x ?? 0).attr("cy", (d) => d.y ?? 0);
 
-        labelSel.attr("x", (d) => d.x ?? 0).attr("y", (d) => (d.y ?? 0) + 26);
+        labelSel
+          .attr("x", (d) => d.x ?? 0)
+          .attr("y", (d) => (d.y ?? 0) + nodeSizeScale(d.count) + 14);
       });
 
     const dragBehavior = d3
-      .drag<SVGCircleElement, NodeDatum>()
+      .drag<SVGCircleElement, GenreNodeDatum>()
       .on("start", (event, d) => {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
+        if (!event.active) simulation.alphaTarget(DRAG_ALPHA_TARGET).restart();
         d.fx = d.x;
         d.fy = d.y;
       })
@@ -223,7 +378,7 @@ export function Sociogram({
       ref={containerRef}
     >
       <svg
-        aria-label="Sociogram"
+        aria-label="Genre Network Visualization"
         className="w-full h-full"
         ref={svgRef}
         role="img"
@@ -232,15 +387,48 @@ export function Sociogram({
         <g ref={gRef} />
       </svg>
 
-      <Card className="pointer-events-none absolute bottom-4 right-4">
-        <CardBody className="p-3">
-          <ul className="space-y-1 text-xs list-disc list-inside">
-            <li>Drag nodes to pin</li>
-            <li>Scroll to zoom</li>
-            <li>Drag empty space to pan</li>
-          </ul>
-        </CardBody>
-      </Card>
+      {useRatingColorScale && ratingExtent[0] && ratingExtent[1] && (
+        <Card className="pointer-events-none absolute bottom-4 left-4">
+          <CardBody className="p-3">
+            <p className="text-xs mb-2">Avg. Movie Rating</p>
+            <div
+              className="w-full h-4 rounded-sm"
+              style={{
+                background: `linear-gradient(to right, ${d3.interpolateRdYlGn(
+                  0,
+                )}, ${d3.interpolateRdYlGn(0.5)}, ${d3.interpolateRdYlGn(1)})`,
+              }}
+            />
+            <div className="flex justify-between text-xs mt-1">
+              <span>{ratingExtent[0].toFixed(1)}</span>
+              <span>{ratingExtent[1].toFixed(1)}</span>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {dataNodes.length > 0 && (
+        <Card className="pointer-events-none absolute bottom-4 right-4">
+          <CardBody className="p-3">
+            <ul className="space-y-1 text-xs list-disc list-inside">
+              <li>Node size = number of movies</li>
+              <li>Link width = co-occurrence frequency</li>
+              <li>Drag nodes to pin</li>
+              <li>Scroll to zoom, drag to pan</li>
+            </ul>
+          </CardBody>
+        </Card>
+      )}
+
+      {dataNodes.length === 0 && (
+        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <CardBody className="p-6 text-center">
+            <p className="text-sm text-gray-500">
+              No genre data available to visualize
+            </p>
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }
