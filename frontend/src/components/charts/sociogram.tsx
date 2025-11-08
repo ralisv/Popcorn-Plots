@@ -283,7 +283,7 @@ export function Sociogram({
       .text(
         (d) =>
           `${d.id}\nMovies: ${d.count}${
-            d.avgRating ? `\nAvg Rating: ${d.avgRating.toFixed(1)}` : ""
+            d.avgRating ? `\nAvg Rating: ${d.avgRating.toFixed(2)}` : ""
           }`,
       );
 
@@ -400,8 +400,8 @@ export function Sociogram({
               }}
             />
             <div className="flex justify-between text-xs mt-1">
-              <span>{ratingExtent[0].toFixed(1)}</span>
-              <span>{ratingExtent[1].toFixed(1)}</span>
+              <span>{ratingExtent[0].toFixed(2)}</span>
+              <span>{ratingExtent[1].toFixed(2)}</span>
             </div>
           </CardBody>
         </Card>
