@@ -6,7 +6,10 @@ import svgr from "vite-plugin-svgr";
 import tsconfigPaths from "vite-tsconfig-paths";
 import packageJson from "./package.json" with { type: "json" };
 
+const { BASE_URL = "/" } = process.env;
+
 export default defineConfig({
+  base: BASE_URL,
   plugins: [
     react(),
     tsconfigPaths(),
