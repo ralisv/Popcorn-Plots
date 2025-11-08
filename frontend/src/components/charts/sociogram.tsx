@@ -7,6 +7,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 /** The minimum and maximum width of the links between genres. */
 const LINK_WIDTH_RANGE: [number, number] = [1, 10];
 
+/** The minimum and maximum opacity for links. */
+const LINK_OPACITY_RANGE: [number, number] = [0.2, 0.8];
+
 /** The minimum and maximum strength of the links' gravitational pull. */
 const LINK_STRENGTH_RANGE: [number, number] = [0.05, 1];
 
@@ -122,23 +125,39 @@ export function Sociogram({
     const nodeLayer = g.append("g").attr("data-layer", "nodes");
     const labelLayer = g.append("g").attr("data-layer", "labels");
 
+    const getNodeId = (node: GenreNodeDatum | string): string =>
+      typeof node === "string" ? node : node.id;
+
+    const isLinkConnectedToNode = (
+      link: GenreLinkDatum,
+      nodeId: string,
+    ): boolean =>
+      getNodeId(link.source) === nodeId || getNodeId(link.target) === nodeId;
+
+    const maxLinkValue = d3.max(dataLinks, (d) => d.value) ?? 1;
+
     // Scale for link width based on connection strength
     const linkWidthScale = d3
       .scaleLinear()
-      .domain([0, d3.max(dataLinks, (d) => d.value) ?? 1])
+      .domain([0, maxLinkValue])
       .range(LINK_WIDTH_RANGE);
 
     // Scale for link strength based on connection value
     const linkStrengthScale = d3
       .scaleLinear()
-      .domain([0, d3.max(dataLinks, (d) => d.value) ?? 1])
+      .domain([0, maxLinkValue])
       .range(LINK_STRENGTH_RANGE);
 
     // Scale for highlighted link color based on connection strength
     const linkHighlightColorScale = d3
       .scaleLinear<string>()
-      .domain([0, d3.max(dataLinks, (d) => d.value) ?? 1])
+      .domain([0, maxLinkValue])
       .range(["gray", "lightgray"]);
+
+    const linkOpacityScale = d3
+      .scaleLinear()
+      .domain([0, maxLinkValue])
+      .range(LINK_OPACITY_RANGE);
 
     const linkSel = linkLayer
       .selectAll<SVGLineElement, GenreLinkDatum>("line")
@@ -151,7 +170,7 @@ export function Sociogram({
       )
       .join("line")
       .attr("stroke", "var(--color-border)")
-      .attr("stroke-opacity", 0.6)
+      .attr("stroke-opacity", (d) => linkOpacityScale(d.value))
       .attr("stroke-width", (d) => linkWidthScale(d.value));
 
     // Scale for node size based on movie count
@@ -193,34 +212,53 @@ export function Sociogram({
           .attr("r", currentRadius * 1.2);
 
         // Highlight connected links
+        const connectedLinks = dataLinks.filter((link) =>
+          isLinkConnectedToNode(link, d.id),
+        );
+        const localMax = d3.max(connectedLinks, (link) => link.value) ?? 0;
+
         linkSel
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
           .attr("stroke", (link) => {
-            const sourceId =
-              typeof link.source === "string" ? link.source : link.source.id;
-            const targetId =
-              typeof link.target === "string" ? link.target : link.target.id;
-            return sourceId === d.id || targetId === d.id
+            return isLinkConnectedToNode(link, d.id)
               ? linkHighlightColorScale(link.value)
               : "var(--color-border)";
           })
           .attr("stroke-opacity", (link) => {
-            const sourceId =
-              typeof link.source === "string" ? link.source : link.source.id;
-            const targetId =
-              typeof link.target === "string" ? link.target : link.target.id;
-            return sourceId === d.id || targetId === d.id ? 1 : 0.5;
+            if (!isLinkConnectedToNode(link, d.id)) {
+              return linkOpacityScale(link.value) * 0.25;
+            }
+
+            if (localMax <= 0) {
+              return 1;
+            }
+
+            const relativeStrength = link.value / localMax;
+
+            return d3.interpolateNumber(
+              LINK_OPACITY_RANGE[0],
+              1,
+            )(relativeStrength);
           })
           .attr("stroke-width", (link) => {
-            const sourceId =
-              typeof link.source === "string" ? link.source : link.source.id;
-            const targetId =
-              typeof link.target === "string" ? link.target : link.target.id;
             const baseWidth = linkWidthScale(link.value);
-            return sourceId === d.id || targetId === d.id
-              ? baseWidth * 2
-              : baseWidth;
+
+            if (!isLinkConnectedToNode(link, d.id)) {
+              return baseWidth * 0.6;
+            }
+
+            if (localMax <= 0) {
+              return Math.max(baseWidth, LINK_WIDTH_RANGE[1]);
+            }
+
+            const relativeStrength = link.value / localMax;
+            const normalizedWidth = d3.interpolateNumber(
+              LINK_WIDTH_RANGE[0],
+              LINK_WIDTH_RANGE[1] * 1.2,
+            )(relativeStrength);
+
+            return Math.max(baseWidth, normalizedWidth);
           });
       })
       .on("mouseleave", function (_event, d) {
@@ -235,7 +273,7 @@ export function Sociogram({
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
           .attr("stroke", "var(--color-border)")
-          .attr("stroke-opacity", 0.4)
+          .attr("stroke-opacity", (link) => linkOpacityScale(link.value))
           .attr("stroke-width", (link) => linkWidthScale(link.value));
       });
 
