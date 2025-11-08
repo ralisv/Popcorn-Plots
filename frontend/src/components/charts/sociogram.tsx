@@ -28,6 +28,9 @@ const ZOOM_EXTENT: [number, number] = [0.1, 8];
 /** The alpha target for the simulation when a node is being dragged. */
 const DRAG_ALPHA_TARGET = 0.3;
 
+/** The duration of the hover transition in milliseconds. */
+const HOVER_TRANSITION_DURATION = 300;
+
 export interface SociogramProps {
   className?: string;
   links?: GenreLinkDatum[];
@@ -164,13 +167,18 @@ export function Sociogram({
       .attr("stroke", "var(--color-card)")
       .attr("stroke-width", 2)
       .attr("class", "transition-all duration-200 ease-out cursor-pointer")
-      .on("mouseenter", function (_event, d) {
+            .on("mouseenter", function (_event, d) {
         // Enlarge the hovered node
         const currentRadius = nodeSizeScale(d.count);
-        d3.select(this).attr("r", currentRadius * 1.2);
+        d3.select(this)
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("r", currentRadius * 1.2);
 
         // Highlight connected links
         linkSel
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
           .attr("stroke", (link) => {
             const sourceId =
               typeof link.source === "string" ? link.source : link.source.id;
@@ -200,10 +208,15 @@ export function Sociogram({
       })
       .on("mouseleave", function (_event, d) {
         // Restore node size
-        d3.select(this).attr("r", nodeSizeScale(d.count));
+        d3.select(this)
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("r", nodeSizeScale(d.count));
 
         // Restore link appearance
         linkSel
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
           .attr("stroke", "var(--color-border)")
           .attr("stroke-opacity", 0.4)
           .attr("stroke-width", (link) => linkWidthScale(link.value));
