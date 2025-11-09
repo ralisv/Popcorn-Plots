@@ -38,6 +38,10 @@ export interface SociogramProps {
   className?: string;
   links?: GenreLinkDatum[];
   nodes?: GenreNodeDatum[];
+  /** Called when the selection of genres changes. Receives the array of selected genre ids. */
+  onSelectionChange?: (ids: string[]) => void;
+  /** Controlled selected genre ids. If omitted, component will manage selection internally. */
+  selectedIds?: string[];
 }
 
 interface GenreLinkDatum extends d3.SimulationLinkDatum<GenreNodeDatum> {
@@ -56,10 +60,13 @@ export function Sociogram({
   className,
   links,
   nodes,
+  onSelectionChange,
+  selectedIds,
 }: SociogramProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<null | SVGSVGElement>(null);
   const gRef = useRef<null | SVGGElement>(null);
+  const [internalSelected, setInternalSelected] = useState<string[]>([]);
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
 
   const { dataLinks, dataNodes } = useMemo(() => {
@@ -76,6 +83,34 @@ export function Sociogram({
     const useRatingColorScale = ratingExtent[0] !== undefined;
     return { ratingExtent, useRatingColorScale };
   }, [dataNodes]);
+
+  useEffect(() => {
+    // If parent controls selection via props, keep internal state in sync for local usage.
+    if (selectedIds !== undefined) {
+      setInternalSelected(selectedIds);
+    }
+  }, [selectedIds]);
+
+  // Update node visuals when selection changes (either controlled prop or internal state)
+  useEffect(() => {
+    if (!gRef.current) return;
+    const selSet = new Set(selectedIds ?? internalSelected);
+
+    const nodeCircles = d3
+      .select(gRef.current)
+      .selectAll<
+        SVGCircleElement,
+        GenreNodeDatum
+      >('g[data-layer="nodes"] circle');
+
+    nodeCircles
+      .transition()
+      .duration(120)
+      .attr("stroke", (d) =>
+        selSet.has(d.id) ? "var(--color-accent)" : "var(--color-card)",
+      )
+      .attr("stroke-width", (d) => (selSet.has(d.id) ? 4 : 2));
+  }, [selectedIds, internalSelected]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -275,6 +310,36 @@ export function Sociogram({
           .attr("stroke", "var(--color-border)")
           .attr("stroke-opacity", (link) => linkOpacityScale(link.value))
           .attr("stroke-width", (link) => linkWidthScale(link.value));
+      })
+      .on("click", function (_event, d) {
+        // Toggle selection for clicked genre
+        const id = d.id;
+        const current = new Set(selectedIds ?? internalSelected);
+        const nextSet = new Set(current);
+
+        if (nextSet.has(id)) {
+          nextSet.delete(id);
+        } else {
+          nextSet.add(id);
+        }
+
+        const next = Array.from(nextSet);
+
+        // If controlled, notify parent. Otherwise update internal state.
+        if (selectedIds !== undefined) {
+          onSelectionChange?.(next);
+        } else {
+          setInternalSelected(next);
+          onSelectionChange?.(next);
+        }
+
+        // Immediate visual feedback for the clicked node
+        d3.select(this)
+          .attr(
+            "stroke",
+            nextSet.has(id) ? "var(--color-accent)" : "var(--color-card)",
+          )
+          .attr("stroke-width", nextSet.has(id) ? 4 : 2);
       });
 
     // Add tooltips on hover
