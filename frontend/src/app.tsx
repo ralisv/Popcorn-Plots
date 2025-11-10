@@ -1,10 +1,12 @@
 import packageJson from "../package.json";
+import { RatingOverTimeChart } from "./components/charts/RatingOverTimeChart";
 import { Sociogram } from "./components/charts/sociogram";
-import { getGenreNetworkData } from "./data/data";
+import { getGenreNetworkData, getMovies } from "./data/data";
 import { fullNameToDisplayName } from "./utils";
 
 export function App(): React.ReactElement {
   const { links, nodes } = getGenreNetworkData();
+  const movies = getMovies();
 
   return (
     <div
@@ -32,8 +34,13 @@ export function App(): React.ReactElement {
       </header>
 
       <main className="flex-grow w-full max-w-7xl px-8 pb-8">
-        <div className="w-full h-[calc(100vh-250px)] bg-gray-900/30 rounded-lg border border-gray-700">
-          <Sociogram links={links} nodes={nodes} />
+        <div className="flex flex-col gap-8 w-full">
+          <div className="h-[80vh] bg-gray-900/30 rounded-lg border border-gray-700">
+            <Sociogram links={links} nodes={nodes} />
+          </div>
+          <div className="h-[80vh] bg-gray-900/30 rounded-lg border border-gray-700">
+            <RatingOverTimeChart movies={movies} />
+          </div>
         </div>
       </main>
     </div>
