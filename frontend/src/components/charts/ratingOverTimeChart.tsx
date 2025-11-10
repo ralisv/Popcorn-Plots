@@ -1,6 +1,5 @@
 import { Card, CardBody } from "@heroui/react";
 import * as d3 from "d3";
-// @ts-expect-error: no types for d3-regression
 import { regressionPoly } from "d3-regression";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type Movie } from "../../data/types";
