@@ -1,3 +1,4 @@
+import { useState } from "react";
 import packageJson from "../package.json";
 import { RatingOverTimeChart } from "./components/charts/RatingOverTimeChart";
 import { Sociogram } from "./components/charts/sociogram";
@@ -7,6 +8,7 @@ import { fullNameToDisplayName } from "./utils";
 export function App(): React.ReactElement {
   const { links, nodes } = getGenreNetworkData();
   const movies = getMovies();
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
 
   return (
     <div
@@ -36,10 +38,18 @@ export function App(): React.ReactElement {
       <main className="flex-grow w-full max-w-7xl px-8 pb-8">
         <div className="flex flex-col gap-8 w-full">
           <div className="h-[80vh] bg-gray-900/30 rounded-lg border border-gray-700">
-            <Sociogram links={links} nodes={nodes} />
+            <Sociogram
+              links={links}
+              nodes={nodes}
+              onSelectedGenresChange={setSelectedGenres}
+              selectedGenres={selectedGenres}
+            />
           </div>
           <div className="h-[80vh] bg-gray-900/30 rounded-lg border border-gray-700">
-            <RatingOverTimeChart movies={movies} />
+            <RatingOverTimeChart
+              movies={movies}
+              selectedGenres={selectedGenres}
+            />
           </div>
         </div>
       </main>

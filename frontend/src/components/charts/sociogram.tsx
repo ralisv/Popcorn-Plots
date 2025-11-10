@@ -1,6 +1,7 @@
 import { Card, CardBody } from "@heroui/react";
 import * as d3 from "d3";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // --- Simulation Constants ---
 
@@ -38,6 +39,8 @@ export interface SociogramProps {
   className?: string;
   links?: GenreLinkDatum[];
   nodes?: GenreNodeDatum[];
+  onSelectedGenresChange?: (genres: string[]) => void;
+  selectedGenres?: string[];
 }
 
 interface GenreLinkDatum extends d3.SimulationLinkDatum<GenreNodeDatum> {
@@ -66,12 +69,39 @@ export function Sociogram({
   className,
   links,
   nodes,
+  onSelectedGenresChange,
+  selectedGenres = [],
 }: SociogramProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<null | SVGSVGElement>(null);
   const gRef = useRef<null | SVGGElement>(null);
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
   const [hoveredLink, setHoveredLink] = useState<HoveredLinkState>(null);
+
+  const handleNodeClick = useCallback(
+    (genreId: string): void => {
+      if (!onSelectedGenresChange) return;
+
+      const newSelection = selectedGenres.includes(genreId)
+        ? selectedGenres.filter((g) => g !== genreId)
+        : [...selectedGenres, genreId];
+
+      onSelectedGenresChange(newSelection);
+    },
+    [onSelectedGenresChange, selectedGenres],
+  );
+
+  const handleClearSelection = useCallback((): void => {
+    onSelectedGenresChange?.([]);
+  }, [onSelectedGenresChange]);
+
+  const handleRemoveGenre = useCallback(
+    (genreId: string): void => {
+      if (!onSelectedGenresChange) return;
+      onSelectedGenresChange(selectedGenres.filter((g) => g !== genreId));
+    },
+    [onSelectedGenresChange, selectedGenres],
+  );
 
   const { dataLinks, dataNodes } = useMemo(() => {
     return {
@@ -255,12 +285,16 @@ export function Sociogram({
           .attr("stroke-opacity", (l) => linkOpacityScale(l.value))
           .attr("stroke-width", (l) => linkWidthScale(l.value));
 
-        // Restore nodes
+        // Restore nodes (preserve selection state)
         nodeSel
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
-          .attr("stroke", "var(--color-card)")
-          .attr("stroke-width", 2)
+          .attr("stroke", (n) =>
+            selectedGenres.includes(n.id)
+              ? "var(--color-primary)"
+              : "var(--color-card)",
+          )
+          .attr("stroke-width", (n) => (selectedGenres.includes(n.id) ? 4 : 2))
           .attr("opacity", 1);
 
         setHoveredLink(null);
@@ -293,9 +327,16 @@ export function Sociogram({
         }
         return genreColorScale(d.id);
       })
-      .attr("stroke", "var(--color-card)")
-      .attr("stroke-width", 2)
+      .attr("stroke", (d) =>
+        selectedGenres.includes(d.id)
+          ? "var(--color-primary)"
+          : "var(--color-card)",
+      )
+      .attr("stroke-width", (d) => (selectedGenres.includes(d.id) ? 4 : 2))
       .attr("class", "transition-all duration-200 ease-out cursor-pointer")
+      .on("click", (_event, d) => {
+        handleNodeClick(d.id);
+      })
       .on("mouseenter", function (_event, d) {
         // Enlarge the hovered node
         const currentRadius = nodeSizeScale(d.count);
@@ -458,7 +499,7 @@ export function Sociogram({
       simulation.stop();
       svg.on(".zoom", null);
     };
-  }, [dataNodes, dataLinks, dimensions]);
+  }, [dataNodes, dataLinks, dimensions, selectedGenres, handleNodeClick]);
 
   return (
     <div
@@ -471,6 +512,39 @@ export function Sociogram({
       ].join(" ")}
       ref={containerRef}
     >
+      {/* Selected Genres Display */}
+      {selectedGenres.length > 0 && (
+        <Card className="absolute top-4 left-1/2 -translate-x-1/2 z-30 max-w-2xl">
+          <CardBody className="p-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold opacity-70">
+                Selected Genres:
+              </span>
+              {selectedGenres.map((genre) => (
+                <button
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                  key={genre}
+                  onClick={() => {
+                    handleRemoveGenre(genre);
+                  }}
+                  type="button"
+                >
+                  {genre}
+                  <X className="w-3 h-3" />
+                </button>
+              ))}
+              <button
+                className="text-xs opacity-60 hover:opacity-100 underline transition-opacity ml-1"
+                onClick={handleClearSelection}
+                type="button"
+              >
+                Clear all
+              </button>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
       <svg
         aria-label="Genre Network Visualization"
         className="w-full h-full"
@@ -557,6 +631,7 @@ export function Sociogram({
             <ul className="space-y-1 text-xs list-disc list-inside">
               <li>Node size = number of movies</li>
               <li>Link width = co-occurrence frequency</li>
+              <li>Click nodes to select/filter</li>
               <li>Drag nodes to pin</li>
               <li>Scroll to zoom, drag to pan</li>
             </ul>

@@ -8,11 +8,13 @@ import { type Movie } from "../../data/types";
 export interface RatingOverTimeChartProps {
   className?: string;
   movies?: Movie[];
+  selectedGenres?: string[];
 }
 
 export function RatingOverTimeChart({
   className,
   movies,
+  selectedGenres = [],
 }: RatingOverTimeChartProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<null | SVGSVGElement>(null);
@@ -20,11 +22,20 @@ export function RatingOverTimeChart({
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
 
   const data = useMemo(() => {
-    return (movies ?? []).map((m) => ({
+    let filteredMovies = movies ?? [];
+
+    // Filter movies by selected genres (must have ALL selected genres)
+    if (selectedGenres.length > 0) {
+      filteredMovies = filteredMovies.filter((m) =>
+        selectedGenres.every((genre) => m.genres.includes(genre)),
+      );
+    }
+
+    return filteredMovies.map((m) => ({
       ...m,
       avgRating: d3.mean(m.reviews, (r) => r.rating) ?? 0,
     }));
-  }, [movies]);
+  }, [movies, selectedGenres]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -159,6 +170,17 @@ export function RatingOverTimeChart({
       <Card className="pointer-events-none absolute top-4 right-4">
         <CardBody className="p-3">
           <div className="flex flex-col text-xs">
+            {selectedGenres.length > 0 && (
+              <div className="mb-2 pb-2 border-b border-gray-700">
+                <div className="text-[10px] opacity-70 mb-1">Filtered by:</div>
+                <div className="font-semibold text-primary">
+                  {selectedGenres.join(" + ")}
+                </div>
+                <div className="text-[10px] opacity-60 mt-1">
+                  {data.length} movies
+                </div>
+              </div>
+            )}
             <div className="flex items-center space-x-2">
               <span className="inline-block w-3 h-3 rounded-full bg-blue-400" />
               <span>Avg. movie rating</span>
@@ -179,7 +201,21 @@ export function RatingOverTimeChart({
         </CardBody>
       </Card>
 
-      {data.length === 0 && (
+      {data.length === 0 && selectedGenres.length > 0 && (
+        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <CardBody className="p-6 text-center">
+            <p className="text-sm text-gray-500">
+              No movies found with all selected genres:
+              <br />
+              <span className="font-semibold text-primary mt-2 inline-block">
+                {selectedGenres.join(" + ")}
+              </span>
+            </p>
+          </CardBody>
+        </Card>
+      )}
+
+      {data.length === 0 && selectedGenres.length === 0 && (
         <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
           <CardBody className="p-6 text-center">
             <p className="text-sm text-gray-500">
