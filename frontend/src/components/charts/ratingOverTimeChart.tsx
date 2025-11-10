@@ -116,7 +116,7 @@ export function RatingOverTimeChart({
       .attr("cx", (d) => xScale(d.startYear))
       .attr("cy", (d) => yScale(d.avgRating))
       .attr("r", 3)
-      .attr("fill", "blue")
+      .attr("fill", "pink")
       .attr("fill-opacity", 0.3)
       .append("title")
       .text(

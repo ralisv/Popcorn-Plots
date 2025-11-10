@@ -1,6 +1,6 @@
 import { useState } from "react";
 import packageJson from "../package.json";
-import { RatingOverTimeChart } from "./components/charts/RatingOverTimeChart";
+import { RatingOverTimeChart } from "./components/charts/ratingOverTimeChart";
 import { Sociogram } from "./components/charts/sociogram";
 import { getGenreNetworkData, getMovies } from "./data/data";
 import { fullNameToDisplayName } from "./utils";
