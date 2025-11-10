@@ -52,6 +52,14 @@ interface GenreNodeDatum extends d3.SimulationNodeDatum {
   id: string; // Genre name
 }
 
+type HoveredLinkState = null | {
+  source: string;
+  target: string;
+  value: number;
+  x: number;
+  y: number;
+};
+
 export function Sociogram({
   className,
   links,
@@ -61,6 +69,7 @@ export function Sociogram({
   const svgRef = useRef<null | SVGSVGElement>(null);
   const gRef = useRef<null | SVGGElement>(null);
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
+  const [hoveredLink, setHoveredLink] = useState<HoveredLinkState>(null);
 
   const { dataLinks, dataNodes } = useMemo(() => {
     return {
@@ -171,7 +180,91 @@ export function Sociogram({
       .join("line")
       .attr("stroke", "var(--color-border)")
       .attr("stroke-opacity", (d) => linkOpacityScale(d.value))
-      .attr("stroke-width", (d) => linkWidthScale(d.value));
+      .attr("stroke-width", (d) => linkWidthScale(d.value))
+      .attr("class", "cursor-pointer")
+      .on("mouseenter", (event: MouseEvent, d) => {
+        const container = containerRef.current;
+        const bbox = container?.getBoundingClientRect();
+        const pointerX = event.clientX - (bbox?.left ?? 0) + 12;
+        const pointerY = event.clientY - (bbox?.top ?? 0) + 12;
+
+        const src = getNodeId(d.source);
+        const tgt = getNodeId(d.target);
+
+        // Bring hovered link to front and highlight it
+        d3.select(event.currentTarget as SVGLineElement)
+          .raise()
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("stroke", "var(--color-foreground)")
+          .attr("stroke-opacity", 1)
+          .attr("stroke-width", Math.max(linkWidthScale(d.value) * 1.6, 2));
+
+        // De-emphasize other links
+        linkSel
+          .filter((l) => l !== d)
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("stroke", "var(--color-border)")
+          .attr("stroke-opacity", (l) => linkOpacityScale(l.value) * 0.25)
+          .attr("stroke-width", (l) => linkWidthScale(l.value) * 0.7);
+
+        // Subtly accent connected nodes and deemphasize others
+        nodeSel
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("stroke", (n) =>
+            n.id === src || n.id === tgt
+              ? "var(--color-foreground)"
+              : "var(--color-card)",
+          )
+          .attr("stroke-width", (n) => (n.id === src || n.id === tgt ? 3 : 2))
+          .attr("opacity", (n) => (n.id === src || n.id === tgt ? 1 : 0.6));
+
+        setHoveredLink({
+          source: src,
+          target: tgt,
+          value: d.value,
+          x: pointerX,
+          y: pointerY,
+        });
+      })
+      .on("mousemove", (event: MouseEvent, d) => {
+        const container = containerRef.current;
+        const bbox = container?.getBoundingClientRect();
+        const pointerX = event.clientX - (bbox?.left ?? 0) + 12;
+        const pointerY = event.clientY - (bbox?.top ?? 0) + 12;
+        setHoveredLink((prev) =>
+          prev
+            ? { ...prev, x: pointerX, y: pointerY }
+            : {
+                source: getNodeId(d.source),
+                target: getNodeId(d.target),
+                value: d.value,
+                x: pointerX,
+                y: pointerY,
+              },
+        );
+      })
+      .on("mouseleave", () => {
+        // Restore link appearance
+        linkSel
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("stroke", "var(--color-border)")
+          .attr("stroke-opacity", (l) => linkOpacityScale(l.value))
+          .attr("stroke-width", (l) => linkWidthScale(l.value));
+
+        // Restore nodes
+        nodeSel
+          .transition()
+          .duration(HOVER_TRANSITION_DURATION)
+          .attr("stroke", "var(--color-card)")
+          .attr("stroke-width", 2)
+          .attr("opacity", 1);
+
+        setHoveredLink(null);
+      });
 
     // Scale for node size based on movie count
     const nodeSizeScale = d3
@@ -209,7 +302,8 @@ export function Sociogram({
         d3.select(this)
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
-          .attr("r", currentRadius * 1.2);
+          .attr("r", currentRadius * 1.2)
+          .attr("opacity", 1); // Ensure hovered node is fully opaque
 
         // Highlight connected links
         const connectedLinks = dataLinks.filter((link) =>
@@ -386,6 +480,25 @@ export function Sociogram({
       >
         <g ref={gRef} />
       </svg>
+
+      {hoveredLink && (
+        <div
+          aria-live="polite"
+          className="pointer-events-none absolute z-20 rounded-md border px-2 py-1 text-xs shadow"
+          style={{
+            background: "var(--color-card)",
+            borderColor: "var(--color-border)",
+            color: "var(--color-foreground)",
+            left: Math.min(hoveredLink.x, Math.max(0, dimensions.width - 180)),
+            top: Math.min(hoveredLink.y, Math.max(0, dimensions.height - 80)),
+          }}
+        >
+          <div className="font-semibold mb-0.5">
+            {hoveredLink.source} ↔ {hoveredLink.target}
+          </div>
+          <div>Co-occurrence: {hoveredLink.value}</div>
+        </div>
+      )}
 
       {useRatingColorScale && ratingExtent[0] && ratingExtent[1] && (
         <Card className="pointer-events-none absolute bottom-4 left-4">
