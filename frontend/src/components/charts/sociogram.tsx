@@ -54,7 +54,9 @@ interface GenreNodeDatum extends d3.SimulationNodeDatum {
 
 type HoveredLinkState = null | {
   source: string;
+  sourceCount: number;
   target: string;
+  targetCount: number;
   value: number;
   x: number;
   y: number;
@@ -191,6 +193,10 @@ export function Sociogram({
         const src = getNodeId(d.source);
         const tgt = getNodeId(d.target);
 
+        // Get node counts for percentage calculations
+        const srcNode = dataNodes.find((n) => n.id === src);
+        const tgtNode = dataNodes.find((n) => n.id === tgt);
+
         // Bring hovered link to front and highlight it
         d3.select(event.currentTarget as SVGLineElement)
           .raise()
@@ -223,27 +229,21 @@ export function Sociogram({
 
         setHoveredLink({
           source: src,
+          sourceCount: srcNode?.count ?? 0,
           target: tgt,
+          targetCount: tgtNode?.count ?? 0,
           value: d.value,
           x: pointerX,
           y: pointerY,
         });
       })
-      .on("mousemove", (event: MouseEvent, d) => {
+      .on("mousemove", (event: MouseEvent) => {
         const container = containerRef.current;
         const bbox = container?.getBoundingClientRect();
         const pointerX = event.clientX - (bbox?.left ?? 0) + 12;
         const pointerY = event.clientY - (bbox?.top ?? 0) + 12;
         setHoveredLink((prev) =>
-          prev
-            ? { ...prev, x: pointerX, y: pointerY }
-            : {
-                source: getNodeId(d.source),
-                target: getNodeId(d.target),
-                value: d.value,
-                x: pointerX,
-                y: pointerY,
-              },
+          prev ? { ...prev, x: pointerX, y: pointerY } : null,
         );
       })
       .on("mouseleave", () => {
@@ -484,19 +484,50 @@ export function Sociogram({
       {hoveredLink && (
         <div
           aria-live="polite"
-          className="pointer-events-none absolute z-20 rounded-md border px-2 py-1 text-xs shadow"
+          className="pointer-events-none absolute z-20 rounded-md border px-3 py-2 text-xs shadow-lg"
           style={{
             background: "var(--color-card)",
             borderColor: "var(--color-border)",
             color: "var(--color-foreground)",
-            left: Math.min(hoveredLink.x, Math.max(0, dimensions.width - 180)),
-            top: Math.min(hoveredLink.y, Math.max(0, dimensions.height - 80)),
+            left: Math.min(hoveredLink.x, Math.max(0, dimensions.width - 220)),
+            top: Math.min(hoveredLink.y, Math.max(0, dimensions.height - 120)),
           }}
         >
-          <div className="font-semibold mb-0.5">
-            {hoveredLink.source} ↔ {hoveredLink.target}
+          <div className="font-semibold mb-1.5 text-sm">
+            {hoveredLink.source} & {hoveredLink.target}
           </div>
-          <div>Co-occurrence: {hoveredLink.value}</div>
+          <div className="space-y-0.5 text-[11px]">
+            <div>
+              <span className="opacity-70">Co-occurrences:</span>{" "}
+              <span className="font-medium">{hoveredLink.value}</span> movies
+            </div>
+            {hoveredLink.sourceCount > 0 && (
+              <div>
+                <span className="opacity-70">{hoveredLink.source}:</span>{" "}
+                <span className="font-medium">
+                  {(
+                    (hoveredLink.value / hoveredLink.sourceCount) *
+                    100
+                  ).toFixed(1)}
+                  %
+                </span>{" "}
+                with {hoveredLink.target}
+              </div>
+            )}
+            {hoveredLink.targetCount > 0 && (
+              <div>
+                <span className="opacity-70">{hoveredLink.target}:</span>{" "}
+                <span className="font-medium">
+                  {(
+                    (hoveredLink.value / hoveredLink.targetCount) *
+                    100
+                  ).toFixed(1)}
+                  %
+                </span>{" "}
+                with {hoveredLink.source}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
