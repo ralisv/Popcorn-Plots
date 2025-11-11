@@ -210,7 +210,7 @@ export function Sociogram({
       .range(NODE_SIZE_RANGE);
 
     const ratingColorScale = d3
-      .scaleSequential(d3.interpolateRdYlGn)
+      .scaleSequential(d3.interpolateViridis)
       .domain(ratingExtent as [number, number]);
 
     const genreColorScale = d3
@@ -615,9 +615,9 @@ export function Sociogram({
             <div
               className="w-full h-4 rounded-sm"
               style={{
-                background: `linear-gradient(to right, ${d3.interpolateRdYlGn(
+                background: `linear-gradient(to right, ${d3.interpolateViridis(
                   0,
-                )}, ${d3.interpolateRdYlGn(0.5)}, ${d3.interpolateRdYlGn(1)})`,
+                )}, ${d3.interpolateViridis(0.5)}, ${d3.interpolateViridis(1)})`,
               }}
             />
             <div className="flex justify-between text-xs mt-1">
