@@ -39,7 +39,9 @@ export interface SociogramProps {
   className?: string;
   links?: GenreLinkDatum[];
   nodes?: GenreNodeDatum[];
-  onSelectedGenresChange?: (genres: string[]) => void;
+  onSelectedGenresChange?: (
+    genres: string[] | ((prevGenres: string[]) => string[]),
+  ) => void;
   selectedGenres?: string[];
 }
 
@@ -78,17 +80,22 @@ export function Sociogram({
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
   const [hoveredLink, setHoveredLink] = useState<HoveredLinkState>(null);
 
+  const selectedGenresRef = useRef(selectedGenres);
+  useEffect(() => {
+    selectedGenresRef.current = selectedGenres;
+  }, [selectedGenres]);
+
   const handleNodeClick = useCallback(
     (genreId: string): void => {
       if (!onSelectedGenresChange) return;
 
-      const newSelection = selectedGenres.includes(genreId)
-        ? selectedGenres.filter((g) => g !== genreId)
-        : [...selectedGenres, genreId];
-
-      onSelectedGenresChange(newSelection);
+      onSelectedGenresChange((prev) =>
+        prev.includes(genreId)
+          ? prev.filter((g) => g !== genreId)
+          : [...prev, genreId],
+      );
     },
-    [onSelectedGenresChange, selectedGenres],
+    [onSelectedGenresChange],
   );
 
   const handleClearSelection = useCallback((): void => {
@@ -98,9 +105,9 @@ export function Sociogram({
   const handleRemoveGenre = useCallback(
     (genreId: string): void => {
       if (!onSelectedGenresChange) return;
-      onSelectedGenresChange(selectedGenres.filter((g) => g !== genreId));
+      onSelectedGenresChange((prev) => prev.filter((g) => g !== genreId));
     },
-    [onSelectedGenresChange, selectedGenres],
+    [onSelectedGenresChange],
   );
 
   const { dataLinks, dataNodes } = useMemo(() => {
@@ -138,7 +145,7 @@ export function Sociogram({
   useEffect(() => {
     const { height, width } = dimensions;
     if (!svgRef.current || !gRef.current || width === 0 || height === 0) return;
-    if (dataNodes.length === 0) return; // Don't render if no data
+    if (dataNodes.length === 0) return;
 
     const svg = d3.select(svgRef.current);
     const g = d3.select(gRef.current);
@@ -177,19 +184,16 @@ export function Sociogram({
 
     const maxLinkValue = d3.max(dataLinks, (d) => d.value) ?? 1;
 
-    // Scale for link width based on connection strength
     const linkWidthScale = d3
       .scaleLinear()
       .domain([0, maxLinkValue])
       .range(LINK_WIDTH_RANGE);
 
-    // Scale for link strength based on connection value
     const linkStrengthScale = d3
       .scaleLinear()
       .domain([0, maxLinkValue])
       .range(LINK_STRENGTH_RANGE);
 
-    // Scale for highlighted link color based on connection strength
     const linkHighlightColorScale = d3
       .scaleLinear<string>()
       .domain([0, maxLinkValue])
@@ -199,6 +203,36 @@ export function Sociogram({
       .scaleLinear()
       .domain([0, maxLinkValue])
       .range(LINK_OPACITY_RANGE);
+
+    const nodeSizeScale = d3
+      .scaleSqrt()
+      .domain([0, d3.max(dataNodes, (d) => d.count) ?? 1])
+      .range(NODE_SIZE_RANGE);
+
+    const ratingColorScale = d3
+      .scaleSequential(d3.interpolateRdYlGn)
+      .domain(ratingExtent as [number, number]);
+
+    const genreColorScale = d3
+      .scaleOrdinal<string>()
+      .domain(dataNodes.map((d) => d.id))
+      .range(chartColors);
+
+    const nodeSel = nodeLayer
+      .selectAll<SVGCircleElement, GenreNodeDatum>("circle")
+      .data(dataNodes, (d) => d.id)
+      .join("circle")
+      .attr("r", (d) => nodeSizeScale(d.count))
+      .attr("fill", (d) => {
+        if (useRatingColorScale && d.avgRating) {
+          return ratingColorScale(d.avgRating);
+        }
+        return genreColorScale(d.id);
+      })
+      .attr("class", "transition-all duration-200 ease-out cursor-pointer")
+      .on("click", (_event, d) => {
+        handleNodeClick(d.id);
+      });
 
     const linkSel = linkLayer
       .selectAll<SVGLineElement, GenreLinkDatum>("line")
@@ -223,11 +257,9 @@ export function Sociogram({
         const src = getNodeId(d.source);
         const tgt = getNodeId(d.target);
 
-        // Get node counts for percentage calculations
         const srcNode = dataNodes.find((n) => n.id === src);
         const tgtNode = dataNodes.find((n) => n.id === tgt);
 
-        // Bring hovered link to front and highlight it
         d3.select(event.currentTarget as SVGLineElement)
           .raise()
           .transition()
@@ -236,7 +268,6 @@ export function Sociogram({
           .attr("stroke-opacity", 1)
           .attr("stroke-width", Math.max(linkWidthScale(d.value) * 1.6, 2));
 
-        // De-emphasize other links
         linkSel
           .filter((l) => l !== d)
           .transition()
@@ -245,7 +276,6 @@ export function Sociogram({
           .attr("stroke-opacity", (l) => linkOpacityScale(l.value) * 0.25)
           .attr("stroke-width", (l) => linkWidthScale(l.value) * 0.7);
 
-        // Subtly accent connected nodes and deemphasize others
         nodeSel
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
@@ -277,7 +307,6 @@ export function Sociogram({
         );
       })
       .on("mouseleave", () => {
-        // Restore link appearance
         linkSel
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
@@ -285,68 +314,31 @@ export function Sociogram({
           .attr("stroke-opacity", (l) => linkOpacityScale(l.value))
           .attr("stroke-width", (l) => linkWidthScale(l.value));
 
-        // Restore nodes (preserve selection state)
         nodeSel
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
           .attr("stroke", (n) =>
-            selectedGenres.includes(n.id)
+            selectedGenresRef.current.includes(n.id)
               ? "var(--color-primary)"
               : "var(--color-card)",
           )
-          .attr("stroke-width", (n) => (selectedGenres.includes(n.id) ? 4 : 2))
+          .attr("stroke-width", (n) =>
+            selectedGenresRef.current.includes(n.id) ? 4 : 2,
+          )
           .attr("opacity", 1);
 
         setHoveredLink(null);
       });
 
-    // Scale for node size based on movie count
-    const nodeSizeScale = d3
-      .scaleSqrt()
-      .domain([0, d3.max(dataNodes, (d) => d.count) ?? 1])
-      .range(NODE_SIZE_RANGE);
-
-    // Color scale based on average rating
-    const ratingColorScale = d3
-      .scaleSequential(d3.interpolateRdYlGn)
-      .domain(ratingExtent as [number, number]);
-
-    const genreColorScale = d3
-      .scaleOrdinal<string>()
-      .domain(dataNodes.map((d) => d.id))
-      .range(chartColors);
-
-    const nodeSel = nodeLayer
-      .selectAll<SVGCircleElement, GenreNodeDatum>("circle")
-      .data(dataNodes, (d) => d.id)
-      .join("circle")
-      .attr("r", (d) => nodeSizeScale(d.count))
-      .attr("fill", (d) => {
-        if (useRatingColorScale && d.avgRating) {
-          return ratingColorScale(d.avgRating);
-        }
-        return genreColorScale(d.id);
-      })
-      .attr("stroke", (d) =>
-        selectedGenres.includes(d.id)
-          ? "var(--color-primary)"
-          : "var(--color-card)",
-      )
-      .attr("stroke-width", (d) => (selectedGenres.includes(d.id) ? 4 : 2))
-      .attr("class", "transition-all duration-200 ease-out cursor-pointer")
-      .on("click", (_event, d) => {
-        handleNodeClick(d.id);
-      })
+    nodeSel
       .on("mouseenter", function (_event, d) {
-        // Enlarge the hovered node
         const currentRadius = nodeSizeScale(d.count);
         d3.select(this)
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
           .attr("r", currentRadius * 1.2)
-          .attr("opacity", 1); // Ensure hovered node is fully opaque
+          .attr("opacity", 1);
 
-        // Highlight connected links
         const connectedLinks = dataLinks.filter((link) =>
           isLinkConnectedToNode(link, d.id),
         );
@@ -397,13 +389,11 @@ export function Sociogram({
           });
       })
       .on("mouseleave", function (_event, d) {
-        // Restore node size
         d3.select(this)
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
           .attr("r", nodeSizeScale(d.count));
 
-        // Restore link appearance
         linkSel
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
@@ -412,7 +402,6 @@ export function Sociogram({
           .attr("stroke-width", (link) => linkWidthScale(link.value));
       });
 
-    // Add tooltips on hover
     nodeSel
       .append("title")
       .text(
@@ -499,7 +488,21 @@ export function Sociogram({
       simulation.stop();
       svg.on(".zoom", null);
     };
-  }, [dataNodes, dataLinks, dimensions, selectedGenres, handleNodeClick]);
+  }, [dataNodes, dataLinks, dimensions, handleNodeClick]);
+
+  useEffect(() => {
+    if (!gRef.current) return;
+    const g = d3.select(gRef.current);
+    g.selectAll<SVGCircleElement, GenreNodeDatum>("circle")
+      .transition()
+      .duration(200)
+      .attr("stroke", (d) =>
+        selectedGenres.includes(d.id)
+          ? "var(--color-primary)"
+          : "var(--color-card)",
+      )
+      .attr("stroke-width", (d) => (selectedGenres.includes(d.id) ? 4 : 2));
+  }, [selectedGenres]);
 
   return (
     <div
