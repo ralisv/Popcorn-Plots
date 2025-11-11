@@ -210,7 +210,7 @@ export function Sociogram({
       .range(NODE_SIZE_RANGE);
 
     const ratingColorScale = d3
-      .scaleSequential(d3.interpolateViridis)
+      .scaleSequential(d3.interpolatePRGn)
       .domain(ratingExtent as [number, number]);
 
     const genreColorScale = d3
