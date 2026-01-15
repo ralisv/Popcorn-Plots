@@ -30,6 +30,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5.0.0
 
+      - name: Set up Python
+        uses: actions/setup-python@v6.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Install Python dependencies
+        run: pip install polars pyarrow pooch tqdm
+        working-directory: data-pipeline
+
+      - name: Run data processing
+        run: python -m src
+        working-directory: data-pipeline
+
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2.0.2
 

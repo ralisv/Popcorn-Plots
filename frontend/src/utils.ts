@@ -11,6 +11,12 @@ export function fullNameToDisplayName(fullName: string): string {
 }
 
 export function publicUrl(path: string | URL): URL {
-  const base = new URL(import.meta.env.BASE_URL, window.location.origin);
+  const baseUrl = import.meta.env.BASE_URL;
+
+  const base = new URL(
+    baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`,
+    window.location.origin,
+  );
+
   return new URL(path, base);
 }
