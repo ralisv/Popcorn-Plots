@@ -40,7 +40,7 @@ export interface SociogramProps {
   links?: GenreLinkDatum[];
   nodes?: GenreNodeDatum[];
   onSelectedGenresChange?: (
-    genres: string[] | ((prevGenres: string[]) => string[]),
+    genres: ((prevGenres: string[]) => string[]) | string[],
   ) => void;
   selectedGenres?: string[];
 }
