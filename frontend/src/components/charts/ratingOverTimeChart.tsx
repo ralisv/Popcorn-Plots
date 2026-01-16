@@ -73,6 +73,16 @@ export function RatingOverTimeChart({
     };
   }, [df, selectedGenres]);
 
+  // Generate seeded random jitter for each point (stable across re-renders)
+  // Jitter within ±0.4 of a year to spread points horizontally
+  const jitterValues = useMemo(() => {
+    const jitterSeed = 12345;
+    return years.map((_, i) => {
+      const x = Math.sin(jitterSeed + i * 9999) * 10000;
+      return (x - Math.floor(x)) * 0.8 - 0.4; // Range: -0.4 to +0.4
+    });
+  }, [years]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -104,12 +114,12 @@ export function RatingOverTimeChart({
       const mouseX = event.clientX - bbox.left - margin.left;
       const mouseY = event.clientY - bbox.top - margin.top;
 
-      // Find closest point
+      // Find closest point (using jittered x positions)
       let closestIdx = -1;
       let closestDist = Infinity;
 
       for (let i = 0; i < years.length; i++) {
-        const px = xScale(years[i]);
+        const px = xScale(years[i] + jitterValues[i]);
         const py = yScale(avgRatings[i]);
         const dist = Math.hypot(mouseX - px, mouseY - py);
 
@@ -132,7 +142,7 @@ export function RatingOverTimeChart({
         setHoveredPoint(null);
       }
     },
-    [years, avgRatings, titles, genres],
+    [years, avgRatings, titles, genres, jitterValues],
   );
 
   useEffect(() => {
@@ -252,14 +262,13 @@ export function RatingOverTimeChart({
       .selectAll("circle")
       .data(indices)
       .join("circle")
-      .attr("cx", (i) => xScale(years[i]))
+      .attr("cx", (i) => xScale(years[i] + jitterValues[i]))
       .attr("cy", (i) => yScale(avgRatings[i]))
-      .attr("r", 3)
+      .attr("r", 2)
       .attr("fill", pointColor)
-      .attr("fill-opacity", 0.2)
+      .attr("fill-opacity", 0.5)
       .attr("stroke", pointColor)
-      .attr("stroke-opacity", 0.3)
-      .attr("stroke-width", 0.5)
+      .attr("stroke-width", 0)
       .style("cursor", "pointer")
       .on("mouseenter", function () {
         d3.select(this)
