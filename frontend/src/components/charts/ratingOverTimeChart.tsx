@@ -1,18 +1,19 @@
+import type { DataFrame } from "danfojs";
+
 import { Card, CardBody } from "@heroui/react";
 import * as d3 from "d3";
 import { regressionPoly } from "d3-regression";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type Movie } from "../../data/types";
 
 export interface RatingOverTimeChartProps {
   className?: string;
-  movies?: Movie[];
+  df?: DataFrame;
   selectedGenres?: string[];
 }
 
 export function RatingOverTimeChart({
   className,
-  movies,
+  df,
   selectedGenres = [],
 }: RatingOverTimeChartProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -20,21 +21,47 @@ export function RatingOverTimeChart({
   const gRef = useRef<null | SVGGElement>(null);
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
 
-  const data = useMemo(() => {
-    let filteredMovies = movies ?? [];
+  // Extract filtered data from DataFrame
+  const { avgRatings, genres, titles, years } = useMemo(() => {
+    if (!df) return { avgRatings: [], genres: [], titles: [], years: [] };
 
-    // Filter movies by selected genres (must have ALL selected genres)
-    if (selectedGenres.length > 0) {
-      filteredMovies = filteredMovies.filter((m) =>
-        selectedGenres.every((genre) => m.genres.includes(genre)),
-      );
+    const allGenres = df.column("genres").values as string[];
+    const allYears = df.column("year").values as number[];
+    const allRatings = df.column("avgRating").values as number[];
+    const allTitles = df.column("title").values as string[];
+
+    if (selectedGenres.length === 0) {
+      return {
+        avgRatings: allRatings,
+        genres: allGenres,
+        titles: allTitles,
+        years: allYears,
+      };
     }
 
-    return filteredMovies.map((m) => ({
-      ...m,
-      avgRating: d3.mean(m.reviews, (r) => r.rating) ?? 0,
-    }));
-  }, [movies, selectedGenres]);
+    // Filter by selected genres
+    const filteredYears: number[] = [];
+    const filteredRatings: number[] = [];
+    const filteredTitles: string[] = [];
+    const filteredGenres: string[] = [];
+
+    for (let i = 0; i < allGenres.length; i++) {
+      const titleGenres = allGenres[i].split(",");
+      if (selectedGenres.every((g) => titleGenres.includes(g))) {
+        filteredYears.push(allYears[i]);
+        filteredRatings.push(allRatings[i]);
+        filteredTitles.push(allTitles[i]);
+        filteredGenres.push(allGenres[i]);
+      }
+    }
+
+    return {
+      avgRatings: filteredRatings,
+      genres: filteredGenres,
+      titles: filteredTitles,
+      years: filteredYears,
+    };
+  }, [df, selectedGenres]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -56,7 +83,7 @@ export function RatingOverTimeChart({
   useEffect(() => {
     const { height, width } = dimensions;
     if (!svgRef.current || !gRef.current || width === 0 || height === 0) return;
-    if (data.length === 0) return;
+    if (years.length === 0) return;
 
     const g = d3.select(gRef.current);
 
@@ -70,18 +97,12 @@ export function RatingOverTimeChart({
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const xExtent = d3.extent(data, (d) => d.startYear);
-    const yExtent = d3.extent(data, (d) => d.avgRating);
+    const xExtent = d3.extent(years) as [number, number];
+    const yExtent = d3.extent(avgRatings) as [number, number];
 
-    const xScale = d3
-      .scaleLinear()
-      .domain([xExtent[0] ?? 0, xExtent[1] ?? 0])
-      .range([0, innerWidth]);
+    const xScale = d3.scaleLinear().domain(xExtent).range([0, innerWidth]);
 
-    const yScale = d3
-      .scaleLinear()
-      .domain([yExtent[0] ?? 0, yExtent[1] ?? 0])
-      .range([innerHeight, 0]);
+    const yScale = d3.scaleLinear().domain(yExtent).range([innerHeight, 0]);
 
     const xAxis = d3.axisBottom(xScale).tickFormat(d3.format("d"));
     const yAxis = d3.axisLeft(yScale);
@@ -108,26 +129,33 @@ export function RatingOverTimeChart({
       .attr("text-anchor", "middle")
       .text("Average Rating");
 
+    // Create index array for data binding
+    const indices = d3.range(years.length);
+
     chartG
       .selectAll("circle")
-      .data(data)
+      .data(indices)
       .join("circle")
-      .attr("cx", (d) => xScale(d.startYear))
-      .attr("cy", (d) => yScale(d.avgRating))
+      .attr("cx", (i) => xScale(years[i]))
+      .attr("cy", (i) => yScale(avgRatings[i]))
       .attr("r", 3)
       .attr("fill", "pink")
       .attr("fill-opacity", 0.3)
       .append("title")
       .text(
-        (d) =>
-          `${d.title} (${d.startYear})\nAvg Rating: ${d.avgRating.toFixed(
-            2,
-          )}\nGenres: ${d.genres.join(", ")}`,
+        (i) =>
+          `${titles[i]} (${years[i]})\nAvg Rating: ${avgRatings[i].toFixed(2)}\nGenres: ${genres[i].replace(/,/g, ", ")}`,
       );
 
+    // Build data array for regression
+    const regressionData = indices.map((i) => ({
+      avgRating: avgRatings[i],
+      year: years[i],
+    }));
+
     const regression = regressionPoly()
-      .x((d: (typeof data)[0]) => d.startYear)
-      .y((d: (typeof data)[0]) => d.avgRating)
+      .x((d: { avgRating: number; year: number }) => d.year)
+      .y((d: { avgRating: number; year: number }) => d.avgRating)
       .order(5);
 
     const line = d3
@@ -137,13 +165,13 @@ export function RatingOverTimeChart({
 
     chartG
       .append("path")
-      .datum(regression(data))
+      .datum(regression(regressionData))
       .attr("d", line)
       .attr("fill", "none")
       .attr("stroke", "red")
       .attr("stroke-width", 2)
       .attr("stroke-dasharray", "4");
-  }, [data, dimensions]);
+  }, [avgRatings, genres, titles, years, dimensions]);
 
   return (
     <div
@@ -176,7 +204,7 @@ export function RatingOverTimeChart({
                   {selectedGenres.join(" + ")}
                 </div>
                 <div className="text-[10px] opacity-60 mt-1">
-                  {data.length} movies
+                  {years.length} movies
                 </div>
               </div>
             )}
@@ -200,7 +228,7 @@ export function RatingOverTimeChart({
         </CardBody>
       </Card>
 
-      {data.length === 0 && selectedGenres.length > 0 && (
+      {years.length === 0 && selectedGenres.length > 0 && (
         <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
           <CardBody className="p-6 text-center">
             <p className="text-sm text-gray-500">
@@ -214,7 +242,7 @@ export function RatingOverTimeChart({
         </Card>
       )}
 
-      {data.length === 0 && selectedGenres.length === 0 && (
+      {years.length === 0 && selectedGenres.length === 0 && (
         <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
           <CardBody className="p-6 text-center">
             <p className="text-sm text-gray-500">

@@ -1,32 +1,5 @@
-import moviesJson from "./data.json";
-import type { MoviesData } from "./types";
-
-export function getMovies(): MoviesData {
-  return moviesJson as MoviesData;
-}
-
-export const genres: string[] = [
-  "Action",
-  "Adventure",
-  "Animation",
-  "Biography",
-  "Comedy",
-  "Crime",
-  "Documentary",
-  "Drama",
-  "Family",
-  "Fantasy",
-  "History",
-  "Horror",
-  "Musical",
-  "Mystery",
-  "Romance",
-  "Sci-Fi",
-  "Sport",
-  "Thriller",
-  "War",
-  "Western",
-];
+import type { DataFrame } from "danfojs";
+import * as dfd from "danfojs";
 
 export interface GenreLinkData {
   source: string;
@@ -34,7 +7,6 @@ export interface GenreLinkData {
   value: number;
 }
 
-// Types for the sociogram
 export interface GenreNodeData {
   avgRating?: number;
   count: number;
@@ -42,137 +14,124 @@ export interface GenreNodeData {
 }
 
 /**
- * Generate nodes and links for the genre network visualization
- * Nodes represent genres, links represent how often genres appear together
+ * Generate nodes and links for the genre network visualization.
+ * Works directly with DataFrame columns.
  */
-export function getGenreNetworkData(): {
+export function getGenreNetworkData(df: DataFrame): {
   links: GenreLinkData[];
   nodes: GenreNodeData[];
 } {
-  const movies = getMovies();
+  const genres = df.column("genres").values as string[];
+  const avgRatings = df.column("avgRating").values as number[];
 
   // Track genre statistics
-  const genreStats = new Map<
-    string,
-    { count: number; reviewCount: number; totalRating: number }
-  >();
-
+  const genreStats = new Map<string, { count: number; totalRating: number }>();
   // Track co-occurrences between genres
   const coOccurrences = new Map<string, number>();
 
-  // Process each movie
-  movies.forEach((movie) => {
-    const movieGenres = movie.genres;
-    const avgRating = calculateAvgRating(movie.reviews);
+  for (let i = 0; i < genres.length; i++) {
+    const titleGenres = genres[i].split(",");
+    const avgRating = avgRatings[i];
 
     // Update genre statistics
-    movieGenres.forEach((genre) => {
-      const stats = genreStats.get(genre) ?? {
-        count: 0,
-        reviewCount: 0,
-        totalRating: 0,
-      };
+    for (const genre of titleGenres) {
+      const stats = genreStats.get(genre) ?? { count: 0, totalRating: 0 };
       stats.count += 1;
-      stats.totalRating += avgRating * movie.reviews.length;
-      stats.reviewCount += movie.reviews.length;
+      stats.totalRating += avgRating;
       genreStats.set(genre, stats);
-    });
+    }
 
     // Track co-occurrences (genres appearing together)
-    for (let i = 0; i < movieGenres.length; i++) {
-      for (let j = i + 1; j < movieGenres.length; j++) {
-        const genre1 = movieGenres[i];
-        const genre2 = movieGenres[j];
-
-        // Create a consistent key (alphabetically sorted)
+    for (let j = 0; j < titleGenres.length; j++) {
+      for (let k = j + 1; k < titleGenres.length; k++) {
+        const genre1 = titleGenres[j];
+        const genre2 = titleGenres[k];
         const key =
           genre1 < genre2 ? `${genre1}|${genre2}` : `${genre2}|${genre1}`;
-
         coOccurrences.set(key, (coOccurrences.get(key) ?? 0) + 1);
       }
     }
-  });
+  }
 
   // Build nodes
   const nodes: GenreNodeData[] = Array.from(genreStats.entries())
     .map(([genre, stats]) => ({
-      avgRating:
-        stats.reviewCount > 0
-          ? stats.totalRating / stats.reviewCount
-          : undefined,
+      avgRating: stats.count > 0 ? stats.totalRating / stats.count : undefined,
       count: stats.count,
       id: genre,
     }))
-    .filter((node) => node.count > 0); // Only include genres that have movies
+    .filter((node) => node.count > 0);
 
-  // Build links (only include co-occurrences above a threshold)
-  const minCoOccurrence = 1; // Minimum number of movies sharing genres
-  const links: GenreLinkData[] = Array.from(coOccurrences.entries())
-    .filter(([, count]) => count >= minCoOccurrence)
-    .map(([key, count]) => {
+  // Build links
+  const links: GenreLinkData[] = Array.from(coOccurrences.entries()).map(
+    ([key, count]) => {
       const [source, target] = key.split("|");
       return { source, target, value: count };
-    });
+    },
+  );
 
   return { links, nodes };
 }
 
 /**
- * Get genre statistics for a specific genre
+ * Join titles with ratings and compute average rating per title.
+ * Returns a new DataFrame with avgRating column added.
  */
-export function getGenreStats(genreName: string): {
-  avgRating: number;
-  movieCount: number;
-  topMovies: { imdbId: string; rating: number; title: string }[];
-} {
-  const movies = getMovies();
+export function joinWithRatings(
+  titlesDf: DataFrame,
+  ratingsDf: DataFrame,
+): DataFrame {
+  // Aggregate ratings by imdbId using Map (faster than groupby)
+  const ratingImdbIds = ratingsDf.column("imdbId").values as number[];
+  const ratingValues = ratingsDf.column("rating").values as number[];
 
-  const genreMovies = movies.filter((movie) =>
-    movie.genres.includes(genreName),
-  );
+  const ratingAgg = new Map<number, { count: number; sum: number }>();
+  for (let i = 0; i < ratingImdbIds.length; i++) {
+    const imdbId = ratingImdbIds[i];
+    const rating = ratingValues[i];
+    const agg = ratingAgg.get(imdbId);
+    if (agg) {
+      agg.sum += rating;
+      agg.count += 1;
+    } else {
+      ratingAgg.set(imdbId, { count: 1, sum: rating });
+    }
+  }
 
-  const avgRating =
-    genreMovies.length > 0
-      ? genreMovies.reduce(
-          (sum, movie) => sum + calculateAvgRating(movie.reviews),
-          0,
-        ) / genreMovies.length
-      : 0;
+  // Extract title columns
+  const ids = titlesDf.column("id").values as number[];
+  const titles = titlesDf.column("title").values as string[];
+  const years = titlesDf.column("year").values as number[];
+  const genresCol = titlesDf.column("genres").values as string[];
+  const runtimeCol = titlesDf.column("runtimeMinutes").values as number[];
 
-  const topMovies = genreMovies
-    .map((movie) => ({
-      imdbId: movie.imdbId,
-      rating: calculateAvgRating(movie.reviews),
-      title: movie.title,
-    }))
-    .sort((a, b) => b.rating - a.rating)
-    .slice(0, 10);
+  // Build filtered arrays (only titles with ratings)
+  const filteredIds: number[] = [];
+  const filteredTitles: string[] = [];
+  const filteredYears: number[] = [];
+  const filteredGenres: string[] = [];
+  const filteredRuntime: number[] = [];
+  const avgRatings: number[] = [];
 
-  return { avgRating, movieCount: genreMovies.length, topMovies };
-}
+  for (let i = 0; i < ids.length; i++) {
+    const agg = ratingAgg.get(ids[i]);
+    if (agg) {
+      filteredIds.push(ids[i]);
+      filteredTitles.push(titles[i]);
+      filteredYears.push(years[i]);
+      filteredGenres.push(genresCol[i]);
+      filteredRuntime.push(runtimeCol[i]);
+      avgRatings.push(agg.sum / agg.count);
+    }
+  }
 
-/**
- * Get the most common genre pairs
- */
-export function getTopGenrePairs(
-  limit = 10,
-): { count: number; genres: [string, string] }[] {
-  const { links } = getGenreNetworkData();
-
-  return links
-    .map((link) => ({
-      count: link.value,
-      genres: [link.source, link.target] as [string, string],
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, limit);
-}
-
-/**
- * Calculate the average rating for a set of reviews
- */
-function calculateAvgRating(reviews: { rating: number }[]): number {
-  if (reviews.length === 0) return 0;
-  const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
-  return sum / reviews.length;
+  // Create new DataFrame with avgRating column
+  return new dfd.DataFrame({
+    avgRating: avgRatings,
+    genres: filteredGenres,
+    id: filteredIds,
+    runtimeMinutes: filteredRuntime,
+    title: filteredTitles,
+    year: filteredYears,
+  });
 }

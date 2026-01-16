@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import packageJson from "../package.json";
 import { RatingOverTimeChart } from "./components/charts/ratingOverTimeChart";
 import { Sociogram } from "./components/charts/sociogram";
-import { getGenreNetworkData, getMovies } from "./data/data";
+import { getGenreNetworkData, joinWithRatings } from "./data/data";
 import { fullNameToDisplayName } from "./utils";
 
 export function App({
@@ -14,11 +14,15 @@ export function App({
   ratingsDf: DataFrame;
   titlesDf: DataFrame;
 }): React.ReactElement {
-  console.log("App received DataFrames:", titlesDf.shape, ratingsDf.shape);
+  // Join titles with ratings, adding avgRating column
+  const df = useMemo(
+    () => joinWithRatings(titlesDf, ratingsDf),
+    [titlesDf, ratingsDf],
+  );
 
-  // Memoize the data so it's only generated once
-  const { links, nodes } = useMemo(() => getGenreNetworkData(), []);
-  const movies = useMemo(() => getMovies(), []);
+  // Memoize the genre network data
+  const { links, nodes } = useMemo(() => getGenreNetworkData(df), [df]);
+
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
 
   return (
@@ -57,10 +61,7 @@ export function App({
             />
           </div>
           <div className="h-[80vh] bg-gray-900/30 rounded-lg border border-gray-700">
-            <RatingOverTimeChart
-              movies={movies}
-              selectedGenres={selectedGenres}
-            />
+            <RatingOverTimeChart df={df} selectedGenres={selectedGenres} />
           </div>
         </div>
       </main>

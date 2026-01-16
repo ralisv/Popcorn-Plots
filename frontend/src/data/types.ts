@@ -1,17 +1,13 @@
-export interface Movie {
-  endYear?: number;
+// Title data from title_basics.parquet
+export interface Title {
   genres: string[];
-  imdbId: string;
-  reviews: MovieReview[];
+  id: number;
   runtimeMinutes?: number;
-  startYear: number;
   title: string;
-  titleType: "movie" | "tvMovie";
+  year: number;
 }
 
-export interface MovieReview {
-  rating: number;
-  timestamp: number;
+// Title with computed average rating
+export interface TitleWithRatings extends Title {
+  avgRating: number;
 }
-
-export type MoviesData = Movie[];
