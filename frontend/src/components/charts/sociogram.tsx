@@ -1,6 +1,5 @@
-import { Card, CardBody } from "@heroui/react";
+import { Card, CardBody, Chip } from "@heroui/react";
 import * as d3 from "d3";
-import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // --- Simulation Constants ---
@@ -28,9 +27,6 @@ const NODE_SIZE_RANGE: [number, number] = [12, 40];
 
 /** The minimum and maximum zoom level. */
 const ZOOM_EXTENT: [number, number] = [0.1, 8];
-
-/** The alpha target for the simulation when a node is being dragged. */
-const DRAG_ALPHA_TARGET = 0.3;
 
 /** The duration of the hover transition in milliseconds. */
 const HOVER_TRANSITION_DURATION = 300;
@@ -67,6 +63,14 @@ type HoveredLinkState = null | {
   y: number;
 };
 
+type HoveredNodeState = null | {
+  avgRating?: number;
+  count: number;
+  id: string;
+  x: number;
+  y: number;
+};
+
 export function Sociogram({
   className,
   links,
@@ -79,6 +83,7 @@ export function Sociogram({
   const gRef = useRef<null | SVGGElement>(null);
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
   const [hoveredLink, setHoveredLink] = useState<HoveredLinkState>(null);
+  const [hoveredNode, setHoveredNode] = useState<HoveredNodeState>(null);
 
   const selectedGenresRef = useRef(selectedGenres);
   useEffect(() => {
@@ -331,7 +336,20 @@ export function Sociogram({
       });
 
     nodeSel
-      .on("mouseenter", function (_event, d) {
+      .on("mouseenter", function (event: MouseEvent, d) {
+        const container = containerRef.current;
+        const bbox = container?.getBoundingClientRect();
+        const pointerX = event.clientX - (bbox?.left ?? 0) + 15;
+        const pointerY = event.clientY - (bbox?.top ?? 0) - 10;
+
+        setHoveredNode({
+          avgRating: d.avgRating,
+          count: d.count,
+          id: d.id,
+          x: pointerX,
+          y: pointerY,
+        });
+
         const currentRadius = nodeSizeScale(d.count);
         d3.select(this)
           .transition()
@@ -388,7 +406,18 @@ export function Sociogram({
             return Math.max(baseWidth, normalizedWidth);
           });
       })
+      .on("mousemove", (event: MouseEvent) => {
+        const container = containerRef.current;
+        const bbox = container?.getBoundingClientRect();
+        const pointerX = event.clientX - (bbox?.left ?? 0) + 15;
+        const pointerY = event.clientY - (bbox?.top ?? 0) - 10;
+        setHoveredNode((prev) =>
+          prev ? { ...prev, x: pointerX, y: pointerY } : null,
+        );
+      })
       .on("mouseleave", function (_event, d) {
+        setHoveredNode(null);
+
         d3.select(this)
           .transition()
           .duration(HOVER_TRANSITION_DURATION)
@@ -401,15 +430,6 @@ export function Sociogram({
           .attr("stroke-opacity", (link) => linkOpacityScale(link.value))
           .attr("stroke-width", (link) => linkWidthScale(link.value));
       });
-
-    nodeSel
-      .append("title")
-      .text(
-        (d) =>
-          `${d.id}\nMovies: ${d.count}${
-            d.avgRating ? `\nAvg Rating: ${d.avgRating.toFixed(2)}` : ""
-          }`,
-      );
 
     const labelSel = labelLayer
       .selectAll<SVGTextElement, GenreNodeDatum>("text")
@@ -426,6 +446,8 @@ export function Sociogram({
 
     const simulation = d3
       .forceSimulation<GenreNodeDatum>(dataNodes)
+      .velocityDecay(0.15) // Lower = more inertia (default 0.4)
+      .alphaDecay(0.01) // Slower cooldown for smoother settling
       .force(
         "link",
         d3
@@ -434,13 +456,18 @@ export function Sociogram({
           .distance(LINK_DISTANCE)
           .strength((d) => linkStrengthScale(d.value)),
       )
-      .force("charge", d3.forceManyBody().strength(NODE_CHARGE_STRENGTH))
-      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force(
+        "charge",
+        d3.forceManyBody().strength(NODE_CHARGE_STRENGTH).distanceMax(400),
+      )
+      .force("center", d3.forceCenter(width / 2, height / 2).strength(0.05))
       .force(
         "collide",
         d3
           .forceCollide<GenreNodeDatum>()
-          .radius((d) => nodeSizeScale(d.count) + NODE_COLLISION_PADDING),
+          .radius((d) => nodeSizeScale(d.count) + NODE_COLLISION_PADDING)
+          .strength(0.8)
+          .iterations(2),
       )
       .on("tick", () => {
         linkSel
@@ -467,18 +494,23 @@ export function Sociogram({
     const dragBehavior = d3
       .drag<SVGCircleElement, GenreNodeDatum>()
       .on("start", (event, d) => {
-        if (!event.active) simulation.alphaTarget(DRAG_ALPHA_TARGET).restart();
+        if (!event.active) simulation.alphaTarget(0.5).restart();
         d.fx = d.x;
         d.fy = d.y;
       })
       .on("drag", (event, d) => {
         d.fx = event.x;
         d.fy = event.y;
+        // Keep simulation warm during drag for responsive feel
+        simulation.alpha(0.5);
       })
       .on("end", (event, d) => {
         if (!event.active) simulation.alphaTarget(0);
+        // Release the node to let it settle naturally with inertia
         d.fx = null;
         d.fy = null;
+        // Give a small kick to let physics settle smoothly
+        simulation.alpha(0.3).restart();
       });
 
     nodeSel.call(dragBehavior);
@@ -524,17 +556,18 @@ export function Sociogram({
                 Selected:
               </span>
               {selectedGenres.map((genre) => (
-                <button
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 hover:border-purple-500/50 transition-all duration-200"
+                <Chip
+                  className="cursor-pointer"
+                  color="secondary"
                   key={genre}
-                  onClick={() => {
+                  onClose={() => {
                     handleRemoveGenre(genre);
                   }}
-                  type="button"
+                  size="sm"
+                  variant="flat"
                 >
                   {genre}
-                  <X className="w-3 h-3 opacity-70" />
-                </button>
+                </Chip>
               ))}
               <button
                 className="text-xs text-gray-500 hover:text-white transition-colors ml-1 px-2 py-1 rounded hover:bg-white/10"
@@ -563,59 +596,91 @@ export function Sociogram({
           aria-live="polite"
           className="pointer-events-none absolute z-20 rounded-xl px-4 py-3 text-xs shadow-2xl backdrop-blur-md"
           style={{
-            background: "rgba(0, 0, 0, 0.7)",
-            border: "1px solid rgba(255, 255, 255, 0.1)",
+            background: "rgba(0, 0, 0, 0.85)",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
             color: "white",
-            left: Math.min(hoveredLink.x, Math.max(0, dimensions.width - 220)),
-            top: Math.min(hoveredLink.y, Math.max(0, dimensions.height - 120)),
+            left: Math.min(hoveredLink.x, Math.max(0, dimensions.width - 260)),
+            top: Math.min(hoveredLink.y, Math.max(0, dimensions.height - 140)),
           }}
         >
-          <div className="font-semibold mb-2 text-sm text-purple-300">
-            {hoveredLink.source} ↔ {hoveredLink.target}
+          <div className="font-semibold mb-3 text-sm text-purple-300">
+            {hoveredLink.source} & {hoveredLink.target}
           </div>
-          <div className="space-y-1 text-[11px]">
-            <div className="flex justify-between gap-4">
-              <span className="text-gray-400">Co-occurrences:</span>
-              <span className="font-medium text-white">{hoveredLink.value.toLocaleString()} movies</span>
+          <div className="space-y-2 text-[11px]">
+            <div className="pb-2 border-b border-white/10">
+              <span className="text-gray-400">Movies with both genres: </span>
+              <span className="font-semibold text-white">
+                {hoveredLink.value.toLocaleString()}
+              </span>
             </div>
             {hoveredLink.sourceCount > 0 && (
-              <div className="flex justify-between gap-4">
-                <span className="text-gray-400">{hoveredLink.source}:</span>
-                <span className="font-medium text-indigo-300">
-                  {(
-                    (hoveredLink.value / hoveredLink.sourceCount) *
-                    100
-                  ).toFixed(1)}%
-                  <span className="text-gray-500 ml-1">overlap</span>
+              <div>
+                <span className="text-gray-400">
+                  Of all <span className="text-purple-300">{hoveredLink.source}</span> movies,{" "}
                 </span>
+                <span className="font-medium text-indigo-300">
+                  {((hoveredLink.value / hoveredLink.sourceCount) * 100).toFixed(1)}%
+                </span>
+                <span className="text-gray-400"> also have </span>
+                <span className="text-purple-300">{hoveredLink.target}</span>
               </div>
             )}
             {hoveredLink.targetCount > 0 && (
-              <div className="flex justify-between gap-4">
-                <span className="text-gray-400">{hoveredLink.target}:</span>
-                <span className="font-medium text-indigo-300">
-                  {(
-                    (hoveredLink.value / hoveredLink.targetCount) *
-                    100
-                  ).toFixed(1)}%
-                  <span className="text-gray-500 ml-1">overlap</span>
+              <div>
+                <span className="text-gray-400">
+                  Of all <span className="text-purple-300">{hoveredLink.target}</span> movies,{" "}
                 </span>
+                <span className="font-medium text-indigo-300">
+                  {((hoveredLink.value / hoveredLink.targetCount) * 100).toFixed(1)}%
+                </span>
+                <span className="text-gray-400"> also have </span>
+                <span className="text-purple-300">{hoveredLink.source}</span>
               </div>
             )}
           </div>
         </div>
       )}
 
+      {/* Node Hover Tooltip */}
+      {hoveredNode && (
+        <Card
+          className="pointer-events-none absolute z-40 bg-black/80 backdrop-blur-md border-white/10"
+          style={{
+            left: Math.min(hoveredNode.x, dimensions.width - 180),
+            top: Math.min(hoveredNode.y, dimensions.height - 100),
+          }}
+        >
+          <CardBody className="p-3">
+            <p className="font-semibold text-sm text-white">{hoveredNode.id}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <Chip color="primary" size="sm" variant="flat">
+                {hoveredNode.count.toLocaleString()} movies
+              </Chip>
+              {hoveredNode.avgRating && (
+                <Chip color="warning" size="sm" variant="flat">
+                  ★ {hoveredNode.avgRating.toFixed(1)}
+                </Chip>
+              )}
+            </div>
+            <p className="text-[10px] text-gray-500 mt-2">
+              Click to filter by this genre
+            </p>
+          </CardBody>
+        </Card>
+      )}
+
       {useRatingColorScale && ratingExtent[0] && ratingExtent[1] && (
         <Card className="pointer-events-none absolute bottom-4 left-4 bg-black/40 backdrop-blur-md border-white/10">
           <CardBody className="p-4">
-            <p className="text-xs text-gray-300 mb-2 font-medium">Avg. Movie Rating</p>
+            <p className="text-xs text-gray-300 mb-2 font-medium">
+              Avg. Movie Rating
+            </p>
             <div
               className="w-32 h-3 rounded-full overflow-hidden"
               style={{
-                background: `linear-gradient(to right, ${d3.interpolateViridis(
+                background: `linear-gradient(to right, ${d3.interpolatePRGn(
                   0,
-                )}, ${d3.interpolateViridis(0.5)}, ${d3.interpolateViridis(1)})`,
+                )}, ${d3.interpolatePRGn(0.5)}, ${d3.interpolatePRGn(1)})`,
               }}
             />
             <div className="flex justify-between text-[10px] text-gray-400 mt-1.5 px-0.5">
@@ -629,7 +694,9 @@ export function Sociogram({
       {dataNodes.length > 0 && (
         <Card className="pointer-events-none absolute bottom-4 right-4 bg-black/40 backdrop-blur-md border-white/10">
           <CardBody className="p-4">
-            <p className="text-xs font-medium text-gray-300 mb-2">How to interact</p>
+            <p className="text-xs font-medium text-gray-300 mb-2">
+              How to interact
+            </p>
             <ul className="space-y-1.5 text-[11px] text-gray-400">
               <li className="flex items-center gap-2">
                 <span className="text-purple-400">◉</span>
