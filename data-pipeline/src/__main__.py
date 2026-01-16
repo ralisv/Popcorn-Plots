@@ -50,6 +50,26 @@ def main() -> None:
         f"Filtered title_basics: {title_basics.shape[0]} -> {title_basics_filtered.shape[0]}"
     )
 
+    percentile = 0.75
+    rating_counts = ratings_filtered.group_by("imdbId").agg(pl.len().alias("count"))
+    min_count_threshold = rating_counts.select(
+        pl.col("count").quantile(percentile).alias("threshold")
+    ).item()
+    print(
+        f"Minimum rating count threshold ({percentile * 100}th percentile): {min_count_threshold}"
+    )
+
+    movies_above_threshold = rating_counts.filter(
+        pl.col("count") >= min_count_threshold
+    ).select("imdbId")
+
+    ratings_filtered = ratings_filtered.join(
+        movies_above_threshold, on="imdbId", how="semi"
+    )
+    title_basics_filtered = title_basics_filtered.join(
+        movies_above_threshold.select(pl.col("imdbId").alias("id")), on="id", how="semi"
+    )
+
     print("Details of the final ratings dataset:")
     print(ratings_filtered)
 
