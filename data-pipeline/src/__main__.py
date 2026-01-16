@@ -53,11 +53,10 @@ def main() -> None:
     )
 
     print("Writing ratings.parquet...")
-    _write_parquet(ratings, OUT_DIR / "ratings.parquet")
+    _write_parquet(ratings_filtered, OUT_DIR / "ratings.parquet")
 
     print("Writing title_basics.parquet...")
-    _write_parquet(title_basics, OUT_DIR / "title_basics.parquet")
-
+    _write_parquet(title_basics_filtered, OUT_DIR / "title_basics.parquet")
 
 if __name__ == "__main__":
     main()
