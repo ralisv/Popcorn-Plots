@@ -1,6 +1,6 @@
 {
   "name": "popcorn-plots",
-  "description": "Exploratory data analysis of combination of movie databases",
+  "description": "Movie genres and ratings visualised",
   "authors": [
     {
       "name": "Vojtěch Ráliš",

@@ -3,6 +3,7 @@ import { DataFrame } from "danfojs";
 import { useMemo, useState } from "react";
 import { useAsyncEffect } from "rooks";
 import { App } from "./app";
+import { Logo } from "./components/Logo";
 import { publicUrl } from "./utils";
 
 type LoaderState =
@@ -132,15 +133,20 @@ export function Loader(): React.JSX.Element {
           className="min-h-screen flex items-center justify-center p-4"
           style={{
             background:
-              "radial-gradient(ellipse at center, #1f2937 0%, #000000 85%)",
+              "radial-gradient(ellipse at top, #1e1b4b 0%, #0f0a1a 40%, #000000 100%)",
           }}
         >
-          <Alert
-            color="danger"
-            description={state.message}
-            title="Failed to load data"
-            variant="faded"
-          />
+          <div className="glass-card rounded-2xl p-8 max-w-md">
+            <div className="text-center mb-4">
+              <span className="text-5xl">😢</span>
+            </div>
+            <Alert
+              color="danger"
+              description={state.message}
+              title="Failed to load data"
+              variant="faded"
+            />
+          </div>
         </div>
       );
     case "loading":
@@ -165,35 +171,46 @@ function LoadingScreen(props: {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center gap-12 p-8"
+      className="min-h-screen flex flex-col items-center justify-center gap-10 p-8"
       style={{
         background:
-          "radial-gradient(ellipse at center, #1f2937 0%, #000000 85%)",
+          "radial-gradient(ellipse at top, #1e1b4b 0%, #0f0a1a 40%, #000000 100%)",
       }}
     >
-      <div className="text-8xl">🎬🍿</div>
+      {/* Decorative background elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse" />
+        <div
+          className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl animate-pulse"
+          style={{ animationDelay: "1s" }}
+        />
+      </div>
+
+      <Logo animated size="lg" />
+
       <h1
-        className="text-5xl font-bold text-white"
+        className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-white via-purple-200 to-indigo-200 bg-clip-text text-transparent pb-1"
         style={{ fontFamily: "'Hahmlet', serif" }}
       >
         Popcorn Plots
       </h1>
 
-      <div className="w-full max-w-xl space-y-4">
+      <div className="w-full max-w-md space-y-6 relative z-10">
         <Progress
           aria-label="Loading data"
           classNames={{
-            indicator: "bg-gradient-to-r from-indigo-500 to-purple-500",
-            track: "bg-gray-700",
+            indicator:
+              "bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-500",
+            track: "bg-white/10",
           }}
           size="lg"
           value={percentage}
         />
-        <p className="flex items-center justify-center gap-3 text-xl text-gray-400">
+        <p className="flex items-center justify-center gap-3 text-lg text-gray-300">
           <Spinner
             classNames={{
-              circle1: "border-b-indigo-500",
-              circle2: "border-b-purple-500",
+              circle1: "border-b-purple-500",
+              circle2: "border-b-indigo-500",
             }}
             size="sm"
           />

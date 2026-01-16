@@ -517,15 +517,15 @@ export function Sociogram({
     >
       {/* Selected Genres Display */}
       {selectedGenres.length > 0 && (
-        <Card className="absolute top-4 left-1/2 -translate-x-1/2 z-30 max-w-2xl">
-          <CardBody className="p-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold opacity-70">
-                Selected Genres:
+        <Card className="absolute top-4 left-1/2 -translate-x-1/2 z-30 max-w-2xl bg-black/50 backdrop-blur-md border-white/10">
+          <CardBody className="p-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs font-semibold text-gray-400">
+                Selected:
               </span>
               {selectedGenres.map((genre) => (
                 <button
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 hover:border-purple-500/50 transition-all duration-200"
                   key={genre}
                   onClick={() => {
                     handleRemoveGenre(genre);
@@ -533,11 +533,11 @@ export function Sociogram({
                   type="button"
                 >
                   {genre}
-                  <X className="w-3 h-3" />
+                  <X className="w-3 h-3 opacity-70" />
                 </button>
               ))}
               <button
-                className="text-xs opacity-60 hover:opacity-100 underline transition-opacity ml-1"
+                className="text-xs text-gray-500 hover:text-white transition-colors ml-1 px-2 py-1 rounded hover:bg-white/10"
                 onClick={handleClearSelection}
                 type="button"
               >
@@ -561,47 +561,45 @@ export function Sociogram({
       {hoveredLink && (
         <div
           aria-live="polite"
-          className="pointer-events-none absolute z-20 rounded-md border px-3 py-2 text-xs shadow-lg"
+          className="pointer-events-none absolute z-20 rounded-xl px-4 py-3 text-xs shadow-2xl backdrop-blur-md"
           style={{
-            background: "var(--color-card)",
-            borderColor: "var(--color-border)",
-            color: "var(--color-foreground)",
+            background: "rgba(0, 0, 0, 0.7)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            color: "white",
             left: Math.min(hoveredLink.x, Math.max(0, dimensions.width - 220)),
             top: Math.min(hoveredLink.y, Math.max(0, dimensions.height - 120)),
           }}
         >
-          <div className="font-semibold mb-1.5 text-sm">
-            {hoveredLink.source} & {hoveredLink.target}
+          <div className="font-semibold mb-2 text-sm text-purple-300">
+            {hoveredLink.source} ↔ {hoveredLink.target}
           </div>
-          <div className="space-y-0.5 text-[11px]">
-            <div>
-              <span className="opacity-70">Co-occurrences:</span>{" "}
-              <span className="font-medium">{hoveredLink.value}</span> movies
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between gap-4">
+              <span className="text-gray-400">Co-occurrences:</span>
+              <span className="font-medium text-white">{hoveredLink.value.toLocaleString()} movies</span>
             </div>
             {hoveredLink.sourceCount > 0 && (
-              <div>
-                <span className="opacity-70">{hoveredLink.source}:</span>{" "}
-                <span className="font-medium">
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-400">{hoveredLink.source}:</span>
+                <span className="font-medium text-indigo-300">
                   {(
                     (hoveredLink.value / hoveredLink.sourceCount) *
                     100
-                  ).toFixed(1)}
-                  %
-                </span>{" "}
-                with {hoveredLink.target}
+                  ).toFixed(1)}%
+                  <span className="text-gray-500 ml-1">overlap</span>
+                </span>
               </div>
             )}
             {hoveredLink.targetCount > 0 && (
-              <div>
-                <span className="opacity-70">{hoveredLink.target}:</span>{" "}
-                <span className="font-medium">
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-400">{hoveredLink.target}:</span>
+                <span className="font-medium text-indigo-300">
                   {(
                     (hoveredLink.value / hoveredLink.targetCount) *
                     100
-                  ).toFixed(1)}
-                  %
-                </span>{" "}
-                with {hoveredLink.source}
+                  ).toFixed(1)}%
+                  <span className="text-gray-500 ml-1">overlap</span>
+                </span>
               </div>
             )}
           </div>
@@ -609,43 +607,60 @@ export function Sociogram({
       )}
 
       {useRatingColorScale && ratingExtent[0] && ratingExtent[1] && (
-        <Card className="pointer-events-none absolute bottom-4 left-4">
-          <CardBody className="p-3">
-            <p className="text-xs mb-2">Avg. Movie Rating</p>
+        <Card className="pointer-events-none absolute bottom-4 left-4 bg-black/40 backdrop-blur-md border-white/10">
+          <CardBody className="p-4">
+            <p className="text-xs text-gray-300 mb-2 font-medium">Avg. Movie Rating</p>
             <div
-              className="w-full h-4 rounded-sm"
+              className="w-32 h-3 rounded-full overflow-hidden"
               style={{
                 background: `linear-gradient(to right, ${d3.interpolateViridis(
                   0,
                 )}, ${d3.interpolateViridis(0.5)}, ${d3.interpolateViridis(1)})`,
               }}
             />
-            <div className="flex justify-between text-xs mt-1">
-              <span>{ratingExtent[0].toFixed(2)}</span>
-              <span>{ratingExtent[1].toFixed(2)}</span>
+            <div className="flex justify-between text-[10px] text-gray-400 mt-1.5 px-0.5">
+              <span>{ratingExtent[0].toFixed(1)}</span>
+              <span>{ratingExtent[1].toFixed(1)}</span>
             </div>
           </CardBody>
         </Card>
       )}
 
       {dataNodes.length > 0 && (
-        <Card className="pointer-events-none absolute bottom-4 right-4">
-          <CardBody className="p-3">
-            <ul className="space-y-1 text-xs list-disc list-inside">
-              <li>Node size = number of movies</li>
-              <li>Link width = co-occurrence frequency</li>
-              <li>Click nodes to select/filter</li>
-              <li>Drag nodes to pin</li>
-              <li>Scroll to zoom, drag to pan</li>
+        <Card className="pointer-events-none absolute bottom-4 right-4 bg-black/40 backdrop-blur-md border-white/10">
+          <CardBody className="p-4">
+            <p className="text-xs font-medium text-gray-300 mb-2">How to interact</p>
+            <ul className="space-y-1.5 text-[11px] text-gray-400">
+              <li className="flex items-center gap-2">
+                <span className="text-purple-400">◉</span>
+                Node size = movie count
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-purple-400">━</span>
+                Link width = co-occurrence
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-purple-400">👆</span>
+                Click to select genres
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-purple-400">✋</span>
+                Drag to move nodes
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-purple-400">🔍</span>
+                Scroll to zoom
+              </li>
             </ul>
           </CardBody>
         </Card>
       )}
 
       {dataNodes.length === 0 && (
-        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <CardBody className="p-6 text-center">
-            <p className="text-sm text-gray-500">
+        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
+          <CardBody className="p-8 text-center">
+            <div className="text-4xl mb-4">🕸️</div>
+            <p className="text-sm text-gray-400">
               No genre data available to visualize
             </p>
           </CardBody>

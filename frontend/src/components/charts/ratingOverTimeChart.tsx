@@ -194,58 +194,62 @@ export function RatingOverTimeChart({
         <g ref={gRef} />
       </svg>
 
-      <Card className="pointer-events-none absolute top-4 right-4">
-        <CardBody className="p-3">
+      <Card className="pointer-events-none absolute top-4 right-4 bg-black/40 backdrop-blur-md border-white/10">
+        <CardBody className="p-4">
           <div className="flex flex-col text-xs">
             {selectedGenres.length > 0 && (
-              <div className="mb-2 pb-2 border-b border-gray-700">
-                <div className="text-[10px] opacity-70 mb-1">Filtered by:</div>
-                <div className="font-semibold text-primary">
+              <div className="mb-3 pb-3 border-b border-white/10">
+                <div className="text-[10px] text-gray-400 mb-1">Filtered by:</div>
+                <div className="font-semibold text-purple-300">
                   {selectedGenres.join(" + ")}
                 </div>
-                <div className="text-[10px] opacity-60 mt-1">
-                  {years.length} movies
+                <div className="text-[10px] text-gray-500 mt-1">
+                  {years.length.toLocaleString()} movies
                 </div>
               </div>
             )}
-            <div className="flex items-center space-x-2">
-              <span className="inline-block w-3 h-3 rounded-full bg-blue-400" />
-              <span>Avg. movie rating</span>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-pink-400/80 shadow-sm shadow-pink-400/50" />
+              <span className="text-gray-300">Movie rating</span>
             </div>
-            <div className="flex items-center space-x-2 mt-2">
+            <div className="flex items-center gap-2 mt-2">
               <span
                 aria-hidden
+                className="w-8"
                 style={{
-                  borderBottom: "2px dashed red",
+                  borderBottom: "2px dashed #ef4444",
                   display: "inline-block",
                   height: 0,
-                  width: 40,
                 }}
               />
-              <span>Trend</span>
+              <span className="text-gray-300">Trend line</span>
             </div>
           </div>
         </CardBody>
       </Card>
 
       {years.length === 0 && selectedGenres.length > 0 && (
-        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <CardBody className="p-6 text-center">
-            <p className="text-sm text-gray-500">
+        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
+          <CardBody className="p-8 text-center">
+            <div className="text-4xl mb-4">🔍</div>
+            <p className="text-sm text-gray-400">
               No movies found with all selected genres:
-              <br />
-              <span className="font-semibold text-primary mt-2 inline-block">
-                {selectedGenres.join(" + ")}
-              </span>
+            </p>
+            <p className="font-semibold text-purple-300 mt-3">
+              {selectedGenres.join(" + ")}
+            </p>
+            <p className="text-xs text-gray-500 mt-3">
+              Try selecting fewer genres
             </p>
           </CardBody>
         </Card>
       )}
 
       {years.length === 0 && selectedGenres.length === 0 && (
-        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <CardBody className="p-6 text-center">
-            <p className="text-sm text-gray-500">
+        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
+          <CardBody className="p-8 text-center">
+            <div className="text-4xl mb-4">📭</div>
+            <p className="text-sm text-gray-400">
               No movie data available to visualize
             </p>
           </CardBody>
