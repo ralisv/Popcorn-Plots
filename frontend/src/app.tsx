@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import packageJson from "../package.json";
 import { RatingOverTimeChart } from "./components/charts/ratingOverTimeChart";
 import { Sociogram } from "./components/charts/sociogram";
+import { GenreKPIPanel } from "./components/GenreKPIPanel";
+import { RatingKPIPanel } from "./components/KPIPanel";
 import { Logo } from "./components/Logo";
 import { getGenreNetworkData, joinWithRatings } from "./data/data";
 import { fullNameToDisplayName } from "./utils";
@@ -92,7 +94,7 @@ export function App({
       </header>
 
       {/* Main Content */}
-      <main className="relative flex-grow w-full max-w-7xl px-4 md:px-8 pb-12">
+      <main className="relative flex-grow w-full max-w-[1500px] pl-4 pr-8 md:pl-8 md:pr-16 pb-12">
         <div className="flex flex-col gap-12 w-full">
           {/* Sociogram Section */}
           <section>
@@ -104,13 +106,22 @@ export function App({
               </h2>
               <div className="h-px flex-grow bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
             </div>
-            <div className="h-[80vh] rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl shadow-purple-500/5 overflow-hidden">
-              <Sociogram
-                links={links}
-                nodes={nodes}
-                onSelectedGenresChange={setSelectedGenres}
-                selectedGenres={selectedGenres}
-              />
+            <div className="flex gap-6 items-stretch">
+              <div className="flex-grow min-h-[400px] rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl shadow-purple-500/5 overflow-hidden">
+                <Sociogram
+                  links={links}
+                  nodes={nodes}
+                  onSelectedGenresChange={setSelectedGenres}
+                  selectedGenres={selectedGenres}
+                />
+              </div>
+              <div className="w-72 flex-shrink-0 hidden lg:block">
+                <GenreKPIPanel
+                  links={links}
+                  nodes={nodes}
+                  selectedGenres={selectedGenres}
+                />
+              </div>
             </div>
           </section>
 
@@ -124,8 +135,13 @@ export function App({
               </h2>
               <div className="h-px flex-grow bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
             </div>
-            <div className="h-[80vh] rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl shadow-indigo-500/5 overflow-hidden">
-              <RatingOverTimeChart df={df} selectedGenres={selectedGenres} />
+            <div className="flex gap-6 items-stretch">
+              <div className="flex-grow min-h-[400px] rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl shadow-indigo-500/5 overflow-hidden">
+                <RatingOverTimeChart df={df} selectedGenres={selectedGenres} />
+              </div>
+              <div className="w-72 flex-shrink-0 hidden lg:block">
+                <RatingKPIPanel df={df} selectedGenres={selectedGenres} />
+              </div>
             </div>
           </section>
         </div>

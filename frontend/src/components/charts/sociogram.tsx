@@ -616,10 +616,16 @@ export function Sociogram({
             {hoveredLink.sourceCount > 0 && (
               <div>
                 <span className="text-gray-400">
-                  Of all <span className="text-purple-300">{hoveredLink.source}</span> movies,{" "}
+                  Of all{" "}
+                  <span className="text-purple-300">{hoveredLink.source}</span>{" "}
+                  movies,{" "}
                 </span>
                 <span className="font-medium text-indigo-300">
-                  {((hoveredLink.value / hoveredLink.sourceCount) * 100).toFixed(1)}%
+                  {(
+                    (hoveredLink.value / hoveredLink.sourceCount) *
+                    100
+                  ).toFixed(1)}
+                  %
                 </span>
                 <span className="text-gray-400"> also have </span>
                 <span className="text-purple-300">{hoveredLink.target}</span>
@@ -628,10 +634,16 @@ export function Sociogram({
             {hoveredLink.targetCount > 0 && (
               <div>
                 <span className="text-gray-400">
-                  Of all <span className="text-purple-300">{hoveredLink.target}</span> movies,{" "}
+                  Of all{" "}
+                  <span className="text-purple-300">{hoveredLink.target}</span>{" "}
+                  movies,{" "}
                 </span>
                 <span className="font-medium text-indigo-300">
-                  {((hoveredLink.value / hoveredLink.targetCount) * 100).toFixed(1)}%
+                  {(
+                    (hoveredLink.value / hoveredLink.targetCount) *
+                    100
+                  ).toFixed(1)}
+                  %
                 </span>
                 <span className="text-gray-400"> also have </span>
                 <span className="text-purple-300">{hoveredLink.source}</span>
