@@ -121,7 +121,7 @@ export function joinWithRatings(
       filteredYears.push(years[i]);
       filteredGenres.push(genresCol[i]);
       filteredRuntime.push(runtimeCol[i]);
-      avgRatings.push(agg.sum / agg.count);
+      avgRatings.push(agg.sum / agg.count / 10); // Divide by 10 to get 0-10 scale
     }
   }
 
