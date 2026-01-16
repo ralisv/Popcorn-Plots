@@ -8,6 +8,7 @@ import { publicUrl } from "./utils";
 type LoaderState =
   | { message: string; phase: "error" }
   | { phase: "loading"; ratio: null | number }
+  | { phase: "processing" }
   | { phase: "ready"; ratingsDf: DataFrame; titlesDf: DataFrame };
 
 type WorkerMsg =
@@ -103,6 +104,8 @@ export function Loader(): React.JSX.Element {
         }),
       ]);
 
+      setState({ phase: "processing" });
+
       const [titlesRows, ratingsRows] = await Promise.all([
         parseParquetInWorker(titlesBuf),
         parseParquetInWorker(ratingsBuf),
@@ -142,13 +145,23 @@ export function Loader(): React.JSX.Element {
       );
     case "loading":
       return <LoadingScreen ratio={state.ratio} />;
+    case "processing":
+      return <LoadingScreen processing />;
     case "ready":
       return <App ratingsDf={state.ratingsDf} titlesDf={state.titlesDf} />;
   }
 }
 
-function LoadingScreen(props: { ratio: null | number }): React.JSX.Element {
-  const percentage = props.ratio !== null ? Math.round(props.ratio * 100) : 0;
+function LoadingScreen(props: {
+  processing?: boolean;
+  ratio?: null | number;
+}): React.JSX.Element {
+  const percentage = props.processing
+    ? 100
+    : props.ratio != null
+      ? Math.round(props.ratio * 100)
+      : 0;
+  const statusText = props.processing ? "Processing data" : "Downloading data";
 
   return (
     <div
@@ -184,7 +197,7 @@ function LoadingScreen(props: { ratio: null | number }): React.JSX.Element {
             }}
             size="sm"
           />
-          Loading data… {percentage}%
+          {statusText}…{props.processing ? "" : ` ${percentage}%`}
         </p>
       </div>
     </div>
