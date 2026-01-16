@@ -7,8 +7,14 @@ import { Sociogram } from "./components/charts/sociogram";
 import { getGenreNetworkData, getMovies } from "./data/data";
 import { fullNameToDisplayName } from "./utils";
 
-export function App({ df }: { df: DataFrame }): React.ReactElement {
-  console.log("App received DataFrame:", df.shape);
+export function App({
+  ratingsDf,
+  titlesDf,
+}: {
+  ratingsDf: DataFrame;
+  titlesDf: DataFrame;
+}): React.ReactElement {
+  console.log("App received DataFrames:", titlesDf.shape, ratingsDf.shape);
 
   // Memoize the data so it's only generated once
   const { links, nodes } = useMemo(() => getGenreNetworkData(), []);

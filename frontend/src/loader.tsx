@@ -6,9 +6,9 @@ import { App } from "./app";
 import { publicUrl } from "./utils";
 
 type LoaderState =
-  | { df: DataFrame; phase: "ready" }
   | { message: string; phase: "error" }
-  | { phase: "loading"; ratio: null | number };
+  | { phase: "loading"; ratio: null | number }
+  | { phase: "ready"; ratingsDf: DataFrame; titlesDf: DataFrame };
 
 type WorkerMsg =
   | { message: string; type: "error" }
@@ -18,7 +18,7 @@ type WorkerMsg =
 export async function fetchArrayBufferWithProgress(
   url: string | URL,
   signal: AbortSignal,
-  onProgress: (ratio: number) => void,
+  onProgress: (loaded: number, total: number) => void,
 ): Promise<ArrayBuffer> {
   const res = await fetch(url, { signal });
 
@@ -48,11 +48,11 @@ export async function fetchArrayBufferWithProgress(
     loaded += value.byteLength;
 
     if (total > 0) {
-      onProgress(loaded / total);
+      onProgress(loaded, total);
     }
   }
 
-  onProgress(1);
+  onProgress(total, total);
 
   const out = new Uint8Array(loaded);
   let off = 0;
@@ -71,24 +71,47 @@ export function Loader(): React.JSX.Element {
     ratio: null,
   });
 
-  const parquetUrl = useMemo(() => publicUrl("data/title_basics.parquet"), []);
+  const titlesUrl = useMemo(() => publicUrl("data/title_basics.parquet"), []);
+  const ratingsUrl = useMemo(() => publicUrl("data/ratings.parquet"), []);
 
   useAsyncEffect(async () => {
     const ac = new AbortController();
 
     try {
-      const buf = await fetchArrayBufferWithProgress(
-        parquetUrl,
-        ac.signal,
-        (ratio) => {
-          setState({ phase: "loading", ratio });
-        },
-      );
+      let titlesLoaded = 0;
+      let titlesTotal = 0;
+      let ratingsLoaded = 0;
+      let ratingsTotal = 0;
 
-      const rows = await parseParquetInWorker(buf);
-      const df = new DataFrame(rows);
+      const updateProgress = (): void => {
+        const totalBytes = titlesTotal + ratingsTotal;
+        const loadedBytes = titlesLoaded + ratingsLoaded;
+        const ratio = totalBytes > 0 ? loadedBytes / totalBytes : null;
+        setState({ phase: "loading", ratio });
+      };
 
-      setState({ df, phase: "ready" });
+      const [titlesBuf, ratingsBuf] = await Promise.all([
+        fetchArrayBufferWithProgress(titlesUrl, ac.signal, (loaded, total) => {
+          titlesLoaded = loaded;
+          titlesTotal = total;
+          updateProgress();
+        }),
+        fetchArrayBufferWithProgress(ratingsUrl, ac.signal, (loaded, total) => {
+          ratingsLoaded = loaded;
+          ratingsTotal = total;
+          updateProgress();
+        }),
+      ]);
+
+      const [titlesRows, ratingsRows] = await Promise.all([
+        parseParquetInWorker(titlesBuf),
+        parseParquetInWorker(ratingsBuf),
+      ]);
+
+      const titlesDf = new DataFrame(titlesRows);
+      const ratingsDf = new DataFrame(ratingsRows);
+
+      setState({ phase: "ready", ratingsDf, titlesDf });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setState({ message: msg, phase: "error" });
@@ -97,7 +120,7 @@ export function Loader(): React.JSX.Element {
     return () => {
       ac.abort();
     };
-  }, [parquetUrl]);
+  }, [titlesUrl, ratingsUrl]);
 
   switch (state.phase) {
     case "error":
@@ -120,7 +143,7 @@ export function Loader(): React.JSX.Element {
     case "loading":
       return <LoadingScreen ratio={state.ratio} />;
     case "ready":
-      return <App df={state.df} />;
+      return <App ratingsDf={state.ratingsDf} titlesDf={state.titlesDf} />;
   }
 }
 
