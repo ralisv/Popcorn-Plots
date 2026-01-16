@@ -46,11 +46,14 @@ def postprocess_imdb(data: Imdb) -> pl.DataFrame:
                 pl.col("runtimeMinutes").cast(pl.UInt32),  # i64 -> u32
                 pl.col("genres")
                 .str.split(",")
-                .cast(pl.List(pl.Categorical)),  # str -> list[cat]
+                .cast(pl.List(pl.Categorical))
+                .list.set_difference(
+                    excluded_genres
+                ),  # str -> list[cat], remove excluded
             )
             .filter(
                 pl.col("titleType").is_in({"movie", "tvMovie"}),
-                pl.col("genres").list.set_difference(excluded_genres).len() != 0,
+                pl.col("genres").list.len() != 0,
             )
             .drop("endYear", "isAdult", "originalTitle", "titleType")
         )
