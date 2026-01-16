@@ -8,13 +8,17 @@ def postprocess_movielens(data: MovieLens32M) -> pl.DataFrame:
         .drop("movieId", "tmdbId", "userId")
         .with_columns(
             pl.col("imdbId").cast(pl.UInt32),  # i64 -> u32
-            pl.col("rating").mul(10).cast(pl.UInt8),  # f32 -> u8
             pl.col("timestamp")
             .mul(1000)
             .cast(pl.Datetime("ms"))
-            .cast(pl.Date),  # i64 -> date
+            .dt.truncate("1w")
+            .cast(pl.Date),  # i64 -> date (truncated to week)
         )
         .rename({"timestamp": "date"})
+        .group_by("imdbId", "date")
+        .agg(
+            pl.col("rating").mean().mul(10).cast(pl.UInt8),  # average rating -> u8
+        )
     )
 
     return ratings

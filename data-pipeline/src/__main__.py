@@ -2,6 +2,8 @@
 
 from pathlib import Path
 from typing import Final
+
+import humanize
 import polars as pl
 
 from .loaders import load_imdb, load_movie_lens_32m
@@ -15,11 +17,7 @@ def _write_parquet(df: pl.DataFrame, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     df.write_parquet(
-        path,
-        compression="zstd",
-        compression_level=22,
-        statistics=False,
-        row_group_size=1_000_000,
+        path, compression="zstd", statistics=False, row_group_size=1_000_000
     )
 
 
@@ -52,11 +50,29 @@ def main() -> None:
         f"Filtered title_basics: {title_basics.shape[0]} -> {title_basics_filtered.shape[0]}"
     )
 
+    print("Details of the final ratings dataset:")
+    print(ratings_filtered)
+
+    print("Details of the final title_basics dataset:")
+    print(title_basics_filtered)
+
     print("Writing ratings.parquet...")
-    _write_parquet(ratings_filtered, OUT_DIR / "ratings.parquet")
+    ratings_path = OUT_DIR / "ratings.parquet"
+    _write_parquet(ratings_filtered, ratings_path)
 
     print("Writing title_basics.parquet...")
-    _write_parquet(title_basics_filtered, OUT_DIR / "title_basics.parquet")
+    title_basics_path = OUT_DIR / "title_basics.parquet"
+    _write_parquet(title_basics_filtered, title_basics_path)
+
+    print(
+        "ratings.parquet:",
+        humanize.naturalsize(ratings_path.stat().st_size, binary=True),
+    )
+    print(
+        "title_basics.parquet:",
+        humanize.naturalsize(title_basics_path.stat().st_size, binary=True),
+    )
+
 
 if __name__ == "__main__":
     main()
