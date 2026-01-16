@@ -14,10 +14,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: frontend
-
     concurrency:
       group: "pages"
       cancel-in-progress: false
@@ -30,30 +26,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5.0.0
 
-      - name: Set up Python
-        uses: actions/setup-python@v6.1.0
-        with:
-          python-version: "3.14"
-
-      - name: Install Python dependencies
-        run: pip install polars pyarrow pooch tqdm
-        working-directory: data-pipeline
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31.9.0
 
       - name: Run data processing
-        run: python -m src
+        run: nix develop --command python -m src
         working-directory: data-pipeline
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2.0.2
-
-      - name: Install dependencies
-        run: bun install
+      - name: Install frontend dependencies
+        run: nix develop --command bun install
+        working-directory: frontend
 
       - name: Set BASE_URL
         run: echo "BASE_URL=/${{ github.event.repository.name }}" >> $GITHUB_ENV
 
       - name: Build project
-        run: bun run build && mv dist ../dist
+        run: nix develop --command bun run build
+        working-directory: frontend
 
       - name: Setup Pages
         uses: actions/configure-pages@v5.0.0
@@ -61,7 +50,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4.0.0
         with:
-          path: dist/
+          path: frontend/dist/
 
       - name: Deploy to GitHub Pages
         id: deployment
