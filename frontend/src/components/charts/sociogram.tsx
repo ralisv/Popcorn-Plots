@@ -169,11 +169,17 @@ export function Sociogram({
     const zoomBehavior = d3
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent(ZOOM_EXTENT)
+      .on("start", () => {
+        svg.style("cursor", "grabbing");
+      })
       .on("zoom", (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
         g.attr("transform", event.transform.toString());
+      })
+      .on("end", () => {
+        svg.style("cursor", "grab");
       });
 
-    svg.call(zoomBehavior);
+    svg.call(zoomBehavior).style("cursor", "grab");
 
     const linkLayer = g.append("g").attr("data-layer", "links");
     const nodeLayer = g.append("g").attr("data-layer", "nodes");
@@ -495,6 +501,7 @@ export function Sociogram({
     const dragBehavior = d3
       .drag<SVGCircleElement, GenreNodeDatum>()
       .on("start", (event, d) => {
+        svg.style("cursor", "grabbing");
         if (!event.active) simulation.alphaTarget(0.5).restart();
         d.fx = d.x;
         d.fy = d.y;
@@ -506,6 +513,7 @@ export function Sociogram({
         simulation.alpha(0.5);
       })
       .on("end", (event, d) => {
+        svg.style("cursor", "grab");
         if (!event.active) simulation.alphaTarget(0);
         // Release the node to let it settle naturally with inertia
         d.fx = null;
