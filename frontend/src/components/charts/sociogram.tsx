@@ -1,6 +1,7 @@
 import { Card, CardBody, Chip } from "@heroui/react";
 import * as d3 from "d3";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { HelpTooltip } from "../HelpTooltip";
 
 // --- Simulation Constants ---
 
@@ -704,35 +705,18 @@ export function Sociogram({
       )}
 
       {dataNodes.length > 0 && (
-        <Card className="pointer-events-none absolute bottom-4 right-4 bg-black/40 backdrop-blur-md border-white/10">
-          <CardBody className="p-4">
-            <p className="text-xs font-medium text-gray-300 mb-2">
-              How to interact
-            </p>
-            <ul className="space-y-1.5 text-[11px] text-gray-400">
-              <li className="flex items-center gap-2">
-                <span className="text-purple-400">◉</span>
-                Node size = movie count
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-purple-400">━</span>
-                Link width = co-occurrence
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-purple-400">👆</span>
-                Click to select genres
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-purple-400">✋</span>
-                Drag to move nodes
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-purple-400">🔍</span>
-                Scroll to zoom
-              </li>
-            </ul>
-          </CardBody>
-        </Card>
+        <div className="absolute top-4 right-4 z-50">
+          <HelpTooltip
+            description="Discover how movie genres relate to each other. Larger nodes represent more popular genres. Thicker connections mean genres appear together more often."
+            interactions={[
+              { icon: "👆", text: "Click a genre to filter movies" },
+              { icon: "✋", text: "Drag nodes to rearrange" },
+              { icon: "🔍", text: "Scroll to zoom in/out" },
+              { icon: "🖐️", text: "Drag empty space to pan" },
+            ]}
+            title="Genre Network"
+          />
+        </div>
       )}
 
       {dataNodes.length === 0 && (

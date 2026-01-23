@@ -5,6 +5,8 @@ import * as d3 from "d3";
 import { regressionPoly } from "d3-regression";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { HelpTooltip } from "../HelpTooltip";
+
 export interface RatingOverTimeChartProps {
   className?: string;
   df?: DataFrame;
@@ -393,55 +395,68 @@ export function RatingOverTimeChart({
         </Card>
       )}
 
-      {/* Legend Card */}
-      <Card className="pointer-events-none absolute top-4 right-4 bg-black/40 backdrop-blur-md border-white/10">
-        <CardBody className="p-4">
-          <div className="flex flex-col gap-3 text-xs">
-            {selectedGenres.length > 0 && (
-              <div className="pb-3 border-b border-white/10">
-                <div className="text-[10px] text-gray-400 mb-2">
-                  Filtered by:
+      {/* Legend Card with Help */}
+      <div className="absolute top-4 right-4 flex items-start gap-2">
+        <HelpTooltip
+          description="Each dot represents a movie plotted by its release year and average user rating. The trend line shows how ratings have changed over time."
+          interactions={[
+            { icon: "👆", text: "Hover points for movie details" },
+            { icon: "🎭", text: "Select genres in the network to filter" },
+          ]}
+          title="Ratings Over Time"
+        />
+        <Card className="pointer-events-none bg-black/40 backdrop-blur-md border-white/10">
+          <CardBody className="p-4">
+            <div className="flex flex-col gap-3 text-xs">
+              {selectedGenres.length > 0 && (
+                <div className="pb-3 border-b border-white/10">
+                  <div className="text-[10px] text-gray-400 mb-2">
+                    Filtered by:
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedGenres.map((genre) => (
+                      <Chip
+                        color="secondary"
+                        key={genre}
+                        size="sm"
+                        variant="flat"
+                      >
+                        {genre}
+                      </Chip>
+                    ))}
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-2">
+                    {years.length.toLocaleString()} movies
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {selectedGenres.map((genre) => (
-                    <Chip
-                      color="secondary"
-                      key={genre}
-                      size="sm"
-                      variant="flat"
-                    >
-                      {genre}
-                    </Chip>
-                  ))}
-                </div>
-                <div className="text-[10px] text-gray-500 mt-2">
-                  {years.length.toLocaleString()} movies
-                </div>
+              )}
+              <div className="space-y-2">
+                <Tooltip
+                  content="Each dot represents a movie's average rating"
+                  placement="left"
+                >
+                  <div className="flex items-center gap-2 cursor-help">
+                    <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
+                    <span className="text-gray-300">Movie rating</span>
+                  </div>
+                </Tooltip>
+                <Tooltip
+                  content="Polynomial regression showing the overall trend"
+                  placement="left"
+                >
+                  <div className="flex items-center gap-2 cursor-help">
+                    <span
+                      aria-hidden
+                      className="w-6 h-0.5 rounded bg-pink-400"
+                    />
+                    <span className="text-gray-300">Trend line</span>
+                  </div>
+                </Tooltip>
               </div>
-            )}
-            <div className="space-y-2">
-              <Tooltip
-                content="Each dot represents a movie's average rating"
-                placement="left"
-              >
-                <div className="flex items-center gap-2 cursor-help">
-                  <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
-                  <span className="text-gray-300">Movie rating</span>
-                </div>
-              </Tooltip>
-              <Tooltip
-                content="Polynomial regression showing the overall trend"
-                placement="left"
-              >
-                <div className="flex items-center gap-2 cursor-help">
-                  <span aria-hidden className="w-6 h-0.5 rounded bg-pink-400" />
-                  <span className="text-gray-300">Trend line</span>
-                </div>
-              </Tooltip>
             </div>
-          </div>
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      </div>
 
       {years.length === 0 && selectedGenres.length > 0 && (
         <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
