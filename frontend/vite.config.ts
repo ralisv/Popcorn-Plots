@@ -20,7 +20,7 @@ export default defineConfig({
       basic: {
         description: packageJson.description,
         siteName: packageJson.name,
-        title: packageJson.authors.map(({ name }) => name).join(" & "),
+        title: "Popcorn Plots",
         type: "website",
         url: packageJson.homepage,
       },
