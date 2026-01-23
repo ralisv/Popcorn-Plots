@@ -9,7 +9,7 @@ import { Logo } from "./components/Logo";
 
 type LoaderState =
   | { message: string; phase: "error" }
-  | { phase: "loading"; ratio: null | number }
+  | { phase: "loading"; ratio: number }
   | { phase: "processing" }
   | { phase: "ready"; ratingsDf: DataFrame; titlesDf: DataFrame };
 
@@ -55,8 +55,6 @@ export async function fetchArrayBufferWithProgress(
     }
   }
 
-  onProgress(total, total);
-
   const out = new Uint8Array(loaded);
   let off = 0;
 
@@ -71,7 +69,7 @@ export async function fetchArrayBufferWithProgress(
 export function Loader(): React.JSX.Element {
   const [state, setState] = useState<LoaderState>({
     phase: "loading",
-    ratio: null,
+    ratio: 0,
   });
 
   const titlesUrl = useMemo(
@@ -95,7 +93,7 @@ export function Loader(): React.JSX.Element {
       const updateProgress = (): void => {
         const totalBytes = titlesTotal + ratingsTotal;
         const loadedBytes = titlesLoaded + ratingsLoaded;
-        const ratio = totalBytes > 0 ? loadedBytes / totalBytes : null;
+        const ratio = totalBytes > 0 ? loadedBytes / totalBytes : 0;
         setState({ phase: "loading", ratio });
       };
 
@@ -167,13 +165,12 @@ export function Loader(): React.JSX.Element {
 
 function LoadingScreen(props: {
   processing?: boolean;
-  ratio?: null | number;
+  ratio?: number;
 }): React.JSX.Element {
   const percentage = props.processing
     ? 100
-    : props.ratio != null
-      ? Math.round(props.ratio * 100)
-      : 0;
+    : Math.round((props.ratio ?? 0) * 100);
+
   const statusText = props.processing ? "Processing data" : "Downloading data";
 
   return (
