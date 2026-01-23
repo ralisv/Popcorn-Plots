@@ -1,9 +1,25 @@
 /**
  * Register the service worker and request persistent storage.
+ * Only enabled in production to avoid caching issues during development.
  */
 export async function registerServiceWorker(): Promise<void> {
   if (!("serviceWorker" in navigator)) {
     console.warn("Service workers are not supported in this browser");
+    return;
+  }
+
+  // In development mode, unregister any existing service workers
+  if (import.meta.env.DEV) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+
+    await Promise.all(
+      registrations.map(async (reg) => {
+        await reg.unregister();
+        console.log("Unregistered existing service worker:", reg.scope);
+      }),
+    );
+
+    console.warn("Service Worker registration skipped in development mode");
     return;
   }
 
