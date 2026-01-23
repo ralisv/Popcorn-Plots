@@ -13,6 +13,7 @@ const gitignorePath = fileURLToPath(new URL(".gitignore", import.meta.url));
 
 export default defineConfig(
   includeIgnoreFile(gitignorePath),
+  { ignores: ["public/**"] },
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
