@@ -31,22 +31,48 @@ sw.addEventListener("activate", (event) => {
   );
 });
 
+/** @type {(url: string) => string} */
+function removeHash(url) {
+  return url.replace(/-[a-f0-9]{8,}\./, ".");
+}
+
 sw.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  if (!url.pathname.endsWith(".parquet")) {
+  const isParquet = url.pathname.endsWith(".parquet");
+  const isSameOrigin = url.origin === sw.location.origin;
+  const isGetMethod = event.request.method === "GET";
+
+  if (!isParquet || !isSameOrigin || !isGetMethod) {
     return;
   }
 
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
-
       const cachedResponse = await cache.match(event.request);
 
       if (cachedResponse) {
+        console.log(`Cache hit for ${event.request.url}`);
         return cachedResponse;
       }
+
+      console.log(`Cache miss for ${event.request.url}`);
+      const cacheKeys = await cache.keys();
+
+      // On cache miss, remove all existing versions of this resource
+      await Promise.all(
+        cacheKeys
+          .filter(
+            (cachedRequest) =>
+              removeHash(new URL(cachedRequest.url).pathname) ===
+              removeHash(url.pathname),
+          )
+          .map(async (request) => {
+            await cache.delete(request);
+            console.log(`Removed obsolete cache entry for ${request.url}`);
+          }),
+      );
 
       const networkResponse = await fetch(event.request);
 
