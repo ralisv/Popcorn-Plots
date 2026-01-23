@@ -3,8 +3,9 @@ import { DataFrame } from "danfojs";
 import { useMemo, useState } from "react";
 import { useAsyncEffect } from "rooks";
 import { App } from "./app";
+import ratingsParquetUrl from "./assets/data/ratings.parquet?url";
+import titleBasicsParquetUrl from "./assets/data/title_basics.parquet?url";
 import { Logo } from "./components/Logo";
-import { publicUrl } from "./utils";
 
 type LoaderState =
   | { message: string; phase: "error" }
@@ -73,8 +74,14 @@ export function Loader(): React.JSX.Element {
     ratio: null,
   });
 
-  const titlesUrl = useMemo(() => publicUrl("data/title_basics.parquet"), []);
-  const ratingsUrl = useMemo(() => publicUrl("data/ratings.parquet"), []);
+  const titlesUrl = useMemo(
+    () => new URL(titleBasicsParquetUrl, import.meta.url),
+    [],
+  );
+  const ratingsUrl = useMemo(
+    () => new URL(ratingsParquetUrl, import.meta.url),
+    [],
+  );
 
   useAsyncEffect(async () => {
     const ac = new AbortController();
