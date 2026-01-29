@@ -34,15 +34,15 @@ export interface TimeSinceReleaseStats {
 interface AggregatedPoint {
   avgRatingDelta: number;
   count: number;
-  yearsSinceRelease: number;
+  monthsSinceRelease: number;
 }
 
 interface HoveredPoint {
   avgRatingDelta: number;
   count: number;
+  monthsSinceRelease: number;
   x: number;
   y: number;
-  yearsSinceRelease: number;
 }
 
 export function RatingVsTimeSinceReleaseChart({
@@ -177,13 +177,13 @@ export function RatingVsTimeSinceReleaseChart({
     const selectedGenreSet =
       selectedGenres.length > 0 ? new Set(selectedGenres) : null;
 
-    // Aggregate by years since release
+    // Aggregate by months since release
     const aggregation = new Map<
       number,
       { count: number; totalDelta: number }
     >();
 
-    for (const { imdbId, ratingDelta, yearsSinceRelease } of ratingData) {
+    for (const { imdbId, monthsSinceRelease, ratingDelta } of ratingData) {
       // Filter by selected genres if any
       if (selectedGenreSet) {
         const titleInfo = titleData.get(imdbId);
@@ -199,12 +199,12 @@ export function RatingVsTimeSinceReleaseChart({
         if (!hasAllGenres) continue;
       }
 
-      const agg = aggregation.get(yearsSinceRelease);
+      const agg = aggregation.get(monthsSinceRelease);
       if (agg) {
         agg.totalDelta += ratingDelta;
         agg.count += 1;
       } else {
-        aggregation.set(yearsSinceRelease, {
+        aggregation.set(monthsSinceRelease, {
           count: 1,
           totalDelta: ratingDelta,
         });
@@ -213,46 +213,95 @@ export function RatingVsTimeSinceReleaseChart({
 
     // Convert to array of points
     const points: AggregatedPoint[] = [];
-    for (const [yearsSinceRelease, agg] of aggregation.entries()) {
+    for (const [monthsSinceRelease, agg] of aggregation.entries()) {
       if (agg.count >= 10) {
         points.push({
           avgRatingDelta: agg.totalDelta / agg.count,
           count: agg.count,
-          yearsSinceRelease,
+          monthsSinceRelease,
         });
       }
     }
 
-    points.sort((a, b) => a.yearsSinceRelease - b.yearsSinceRelease);
+    points.sort((a, b) => a.monthsSinceRelease - b.monthsSinceRelease);
     return points;
   }, [ratingData, titleData, selectedGenres]);
 
-  // Calculate the full x extent for slider bounds (based on genre-filtered data)
+  // Calculate the full x extent for slider bounds in years (based on genre-filtered data)
   const xFullExtent = useMemo(() => {
     if (allData.length === 0) return { max: 100, min: 0 };
-    const extent = d3.extent(allData, (d) => d.yearsSinceRelease) as [
+    const extent = d3.extent(allData, (d) => d.monthsSinceRelease) as [
       number,
       number,
     ];
-    return { max: extent[1], min: extent[0] };
+    // Convert to years for slider
+    return { max: Math.ceil(extent[1] / 12), min: Math.floor(extent[0] / 12) };
   }, [allData]);
 
-  // Initialize x-range to full extent when data changes
+  // Initialize x-range to 0-35 years by default
   useEffect(() => {
     if (allData.length > 0 && xRangeMin === null && xRangeMax === null) {
-      setXRangeMin(xFullExtent.min);
-      setXRangeMax(xFullExtent.max);
+      setXRangeMin(0);
+      setXRangeMax(45);
     }
-  }, [allData, xFullExtent, xRangeMin, xRangeMax]);
+  }, [allData, xRangeMin, xRangeMax]);
 
-  // Filter data by x-axis range
+  // Determine if we should show monthly or yearly view based on range
+  const useMonthlyView = useMemo(() => {
+    if (xRangeMin === null || xRangeMax === null) return false;
+    return xRangeMax - xRangeMin < 3;
+  }, [xRangeMin, xRangeMax]);
+
+  // Filter and optionally re-aggregate data by x-axis range
   const aggregatedData = useMemo(() => {
     if (xRangeMin === null || xRangeMax === null) return allData;
-    return allData.filter(
+    const minMonths = xRangeMin * 12;
+    const maxMonths = xRangeMax * 12;
+
+    // Filter to range first
+    const filtered = allData.filter(
       (d) =>
-        d.yearsSinceRelease >= xRangeMin && d.yearsSinceRelease <= xRangeMax,
+        d.monthsSinceRelease >= minMonths && d.monthsSinceRelease <= maxMonths,
     );
-  }, [allData, xRangeMin, xRangeMax]);
+
+    // If using monthly view, return as-is
+    if (useMonthlyView) {
+      return filtered;
+    }
+
+    // Otherwise, re-aggregate by years
+    const yearAggregation = new Map<
+      number,
+      { count: number; totalDelta: number }
+    >();
+    for (const point of filtered) {
+      const year = Math.floor(point.monthsSinceRelease / 12);
+      const yearInMonths = year * 12; // Store as months for consistent x-axis
+      const agg = yearAggregation.get(yearInMonths);
+      if (agg) {
+        // Weight by count to get proper average
+        agg.totalDelta += point.avgRatingDelta * point.count;
+        agg.count += point.count;
+      } else {
+        yearAggregation.set(yearInMonths, {
+          count: point.count,
+          totalDelta: point.avgRatingDelta * point.count,
+        });
+      }
+    }
+
+    const yearPoints: AggregatedPoint[] = [];
+    for (const [monthsSinceRelease, agg] of yearAggregation.entries()) {
+      yearPoints.push({
+        avgRatingDelta: agg.totalDelta / agg.count,
+        count: agg.count,
+        monthsSinceRelease,
+      });
+    }
+
+    yearPoints.sort((a, b) => a.monthsSinceRelease - b.monthsSinceRelease);
+    return yearPoints;
+  }, [allData, xRangeMin, xRangeMax, useMonthlyView]);
 
   // Handle range slider change
   const handleRangeChange = useCallback((min: number, max: number) => {
@@ -296,7 +345,7 @@ export function RatingVsTimeSinceReleaseChart({
       let closestDist = Infinity;
 
       for (let i = 0; i < aggregatedData.length; i++) {
-        const px = xScale(aggregatedData[i].yearsSinceRelease);
+        const px = xScale(aggregatedData[i].monthsSinceRelease);
         const py = yScale(aggregatedData[i].avgRatingDelta);
         const dist = Math.hypot(mouseX - px, mouseY - py);
 
@@ -310,9 +359,9 @@ export function RatingVsTimeSinceReleaseChart({
         setHoveredPoint({
           avgRatingDelta: aggregatedData[closestIdx].avgRatingDelta,
           count: aggregatedData[closestIdx].count,
+          monthsSinceRelease: aggregatedData[closestIdx].monthsSinceRelease,
           x: event.clientX - bbox.left + 15,
           y: event.clientY - bbox.top - 10,
-          yearsSinceRelease: aggregatedData[closestIdx].yearsSinceRelease,
         });
       } else {
         setHoveredPoint(null);
@@ -340,8 +389,8 @@ export function RatingVsTimeSinceReleaseChart({
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Calculate domains
-    const xExtent = d3.extent(aggregatedData, (d) => d.yearsSinceRelease) as [
+    // Calculate domains (x-axis in months)
+    const xExtent = d3.extent(aggregatedData, (d) => d.monthsSinceRelease) as [
       number,
       number,
     ];
@@ -391,11 +440,24 @@ export function RatingVsTimeSinceReleaseChart({
       .attr("stroke", "rgba(255,255,255,0.04)")
       .attr("stroke-dasharray", "2,4");
 
-    // Axes
+    // Axes (display years on x-axis even though data is in months)
+    // Generate tick values at year boundaries (multiples of 12 months)
+    const xDomain = xScale.domain();
+    const minYear = Math.ceil(xDomain[0] / 12);
+    const maxYear = Math.floor(xDomain[1] / 12);
+    const yearRange = maxYear - minYear;
+    // Determine step size based on range to avoid too many ticks
+    const yearStep =
+      yearRange <= 10 ? 1 : yearRange <= 20 ? 2 : yearRange <= 50 ? 5 : 10;
+    const yearTicks: number[] = [];
+    for (let y = minYear; y <= maxYear; y += yearStep) {
+      yearTicks.push(y * 12); // Convert back to months for the scale
+    }
+
     const xAxis = d3
       .axisBottom(xScale)
-      .tickFormat((d) => `${d.valueOf()}y`)
-      .ticks(Math.min(10, innerWidth / 80));
+      .tickValues(yearTicks)
+      .tickFormat((d) => `${Math.round(d.valueOf() / 12)}y`);
 
     const yAxis = d3.axisLeft(yScale).ticks(8);
 
@@ -461,7 +523,7 @@ export function RatingVsTimeSinceReleaseChart({
       .selectAll("circle")
       .data(aggregatedData)
       .join("circle")
-      .attr("cx", (d) => xScale(d.yearsSinceRelease))
+      .attr("cx", (d) => xScale(d.monthsSinceRelease))
       .attr("cy", (d) => yScale(d.avgRatingDelta))
       .attr("r", (d) => sizeScale(d.count))
       .attr("fill", pointColor)
@@ -488,16 +550,16 @@ export function RatingVsTimeSinceReleaseChart({
     // Build data array for regression
     const regressionData = aggregatedData.map((d) => ({
       avgRatingDelta: d.avgRatingDelta,
-      yearsSinceRelease: d.yearsSinceRelease,
+      monthsSinceRelease: d.monthsSinceRelease,
     }));
 
     const regression = regressionPoly()
       .x(
-        (d: { avgRatingDelta: number; yearsSinceRelease: number }) =>
-          d.yearsSinceRelease,
+        (d: { avgRatingDelta: number; monthsSinceRelease: number }) =>
+          d.monthsSinceRelease,
       )
       .y(
-        (d: { avgRatingDelta: number; yearsSinceRelease: number }) =>
+        (d: { avgRatingDelta: number; monthsSinceRelease: number }) =>
           d.avgRatingDelta,
       )
       .order(3);
@@ -587,11 +649,17 @@ export function RatingVsTimeSinceReleaseChart({
           >
             <CardBody className="p-3">
               <p className="font-semibold text-sm text-white">
-                {hoveredPoint.yearsSinceRelease === 0
-                  ? "Release Year"
-                  : hoveredPoint.yearsSinceRelease === 1
-                    ? "1 year after release"
-                    : `${hoveredPoint.yearsSinceRelease} years after release`}
+                {useMonthlyView
+                  ? hoveredPoint.monthsSinceRelease === 0
+                    ? "Release Month"
+                    : hoveredPoint.monthsSinceRelease === 1
+                      ? "1 month after release"
+                      : `${hoveredPoint.monthsSinceRelease} months after release`
+                  : hoveredPoint.monthsSinceRelease === 0
+                    ? "Release Year"
+                    : hoveredPoint.monthsSinceRelease === 12
+                      ? "1 year after release"
+                      : `${Math.round(hoveredPoint.monthsSinceRelease / 12)} years after release`}
               </p>
               <div className="flex items-center gap-2 mt-2">
                 <Chip
