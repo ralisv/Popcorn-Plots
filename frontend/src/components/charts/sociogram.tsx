@@ -18,7 +18,7 @@ const LINK_DISTANCE = 120;
 const NODE_COLLISION_PADDING = 10;
 
 /** The minimum and maximum radius of the nodes. */
-const NODE_SIZE_RANGE: [number, number] = [12, 40];
+const NODE_SIZE_RANGE: [number, number] = [10, 50];
 
 /** The minimum and maximum zoom level. */
 const ZOOM_EXTENT: [number, number] = [0.5, 8];
@@ -345,8 +345,9 @@ export function Sociogram({
           .attr("stroke-width", (l) => linkWidthScale(l.value));
 
         nodeSel
-          .transition()
+          .transition("node-hover")
           .duration(HOVER_TRANSITION_DURATION)
+          .attr("r", (n) => nodeSizeScale(n.count))
           .attr("stroke", (n) =>
             selectedGenresRef.current.includes(n.id)
               ? "var(--color-primary)"
@@ -377,7 +378,7 @@ export function Sociogram({
 
         const currentRadius = nodeSizeScale(d.count);
         d3.select(this)
-          .transition()
+          .transition("node-hover")
           .duration(HOVER_TRANSITION_DURATION)
           .attr("r", currentRadius * 1.2)
           .attr("opacity", 1);
@@ -440,13 +441,15 @@ export function Sociogram({
           prev ? { ...prev, x: pointerX, y: pointerY } : null,
         );
       })
-      .on("mouseleave", function (_event, d) {
+      .on("mouseleave", function () {
         setHoveredNode(null);
 
-        d3.select(this)
-          .transition()
+        // Reset ALL nodes to their default radius to handle any transition interruptions
+        nodeSel
+          .transition("node-hover")
           .duration(HOVER_TRANSITION_DURATION)
-          .attr("r", nodeSizeScale(d.count));
+          .attr("r", (n) => nodeSizeScale(n.count))
+          .attr("opacity", 1);
 
         linkSel
           .transition()
