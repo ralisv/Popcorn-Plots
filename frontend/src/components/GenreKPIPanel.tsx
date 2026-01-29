@@ -1,5 +1,5 @@
 import { Card, CardBody, Progress } from "@heroui/react";
-import { Activity, Link2, Sparkles, Users } from "lucide-react";
+import { Sparkles, Users } from "lucide-react";
 import { useMemo } from "react";
 
 interface GenreKPIPanelProps {
@@ -30,12 +30,9 @@ export function GenreKPIPanel({
   const stats = useMemo(() => {
     if (nodes.length === 0) {
       return {
-        avgConnections: 0,
         highestRated: [] as { genre: string; rating: number }[],
         lowestRated: [] as { genre: string; rating: number }[],
-        mostConnected: [] as { connections: number; genre: string }[],
         mostPopular: [] as { count: number; genre: string }[],
-        totalConnections: 0,
         totalGenres: 0,
         totalMovies: 0,
       };
@@ -43,9 +40,6 @@ export function GenreKPIPanel({
 
     const totalGenres = nodes.length;
     const totalMovies = nodes.reduce((sum, n) => sum + n.count, 0);
-    const totalConnections = links.length;
-    const avgConnections =
-      totalGenres > 0 ? (totalConnections * 2) / totalGenres : 0;
 
     // Most popular genres (by movie count)
     const mostPopular = [...nodes]
@@ -65,32 +59,8 @@ export function GenreKPIPanel({
       .slice(0, 3)
       .map((n) => ({ genre: n.id, rating: n.avgRating ?? 0 }));
 
-    // Most connected genres
-    const connectionCount = new Map<string, number>();
-    for (const link of links) {
-      const source =
-        typeof link.source === "string" ? link.source : link.source.id;
-      const target =
-        typeof link.target === "string" ? link.target : link.target.id;
-      connectionCount.set(source, (connectionCount.get(source) ?? 0) + 1);
-      connectionCount.set(target, (connectionCount.get(target) ?? 0) + 1);
-    }
-    const mostConnected = Array.from(connectionCount.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([genre, connections]) => ({ connections, genre }));
-
-    return {
-      avgConnections,
-      highestRated,
-      lowestRated,
-      mostConnected,
-      mostPopular,
-      totalConnections,
-      totalGenres,
-      totalMovies,
-    };
-  }, [nodes, links]);
+    return { highestRated, lowestRated, mostPopular, totalGenres, totalMovies };
+  }, [nodes]);
 
   const maxCount = Math.max(...nodes.map((n) => n.count), 1);
 
@@ -158,7 +128,7 @@ export function GenreKPIPanel({
                 <div className="flex items-center gap-1">
                   <span className="text-yellow-400">★</span>
                   <span className="text-sm font-semibold text-white">
-                    {item.rating.toFixed(1)}
+                    {item.rating.toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -172,21 +142,21 @@ export function GenreKPIPanel({
         </CardBody>
       </Card>
 
-      {/* Most Connected Genres */}
+      {/* Worst Rated Genres */}
       <Card className="bg-black/40 backdrop-blur-md border-white/10">
         <CardBody className="p-4">
           <div className="flex items-center gap-2 mb-3">
-            <Link2 className="text-indigo-400" size={18} />
-            <h3 className="text-sm font-semibold text-white">Most Connected</h3>
+            <Sparkles className="text-red-400" size={18} />
+            <h3 className="text-sm font-semibold text-white">Lowest Rated</h3>
           </div>
           <div className="space-y-2">
-            {stats.mostConnected.map((item, idx) => (
+            {stats.lowestRated.map((item, idx) => (
               <div
                 className="flex items-center justify-between p-2 rounded-lg bg-white/5"
                 key={item.genre}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-lg font-bold text-indigo-400/60">
+                  <span className="text-lg font-bold text-red-400/60">
                     {idx + 1}
                   </span>
                   <span className="text-sm font-medium text-white">
@@ -194,13 +164,18 @@ export function GenreKPIPanel({
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Activity className="text-indigo-400" size={14} />
+                  <span className="text-red-400">★</span>
                   <span className="text-sm font-semibold text-white">
-                    {item.connections}
+                    {item.rating.toFixed(2)}
                   </span>
                 </div>
               </div>
             ))}
+            {stats.lowestRated.length === 0 && (
+              <div className="text-xs text-gray-500 text-center py-2">
+                No rating data
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>

@@ -385,7 +385,7 @@ export function RatingOverTimeChart({
                 {hoveredPoint.year}
               </Chip>
               <Chip color="warning" size="sm" variant="flat">
-                ★ {hoveredPoint.avgRating.toFixed(1)}
+                ★ {hoveredPoint.avgRating.toFixed(2)}
               </Chip>
             </div>
             <p className="text-[11px] text-gray-400 mt-2">

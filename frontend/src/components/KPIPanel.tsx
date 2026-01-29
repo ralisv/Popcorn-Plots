@@ -139,7 +139,7 @@ export function RatingKPIPanel({
         <CardBody className="p-6">
           <div className="text-center mb-6">
             <div className="text-5xl font-bold text-white mb-1">
-              {stats.avgRating.toFixed(1)}
+              {stats.avgRating.toFixed(2)}
               <span className="text-2xl text-yellow-400 ml-1">★</span>
             </div>
             <div className="text-sm text-gray-400">Average Rating</div>
@@ -208,7 +208,7 @@ export function RatingKPIPanel({
                 <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                   <span className="text-yellow-400">★</span>
                   <span className="text-sm font-semibold text-white">
-                    {movie.rating.toFixed(1)}
+                    {movie.rating.toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -251,7 +251,7 @@ export function RatingKPIPanel({
                 <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                   <span className="text-yellow-400">★</span>
                   <span className="text-sm font-semibold text-white">
-                    {movie.rating.toFixed(1)}
+                    {movie.rating.toFixed(2)}
                   </span>
                 </div>
               </div>

@@ -725,7 +725,7 @@ export function Sociogram({
               </Chip>
               {hoveredNode.avgRating && (
                 <Chip color="warning" size="sm" variant="flat">
-                  ★ {hoveredNode.avgRating.toFixed(1)}
+                  ★ {hoveredNode.avgRating.toFixed(2)}
                 </Chip>
               )}
             </div>
@@ -751,8 +751,8 @@ export function Sociogram({
               }}
             />
             <div className="flex justify-between text-[10px] text-gray-400 mt-1.5 px-0.5">
-              <span>{ratingExtent[0].toFixed(1)}</span>
-              <span>{ratingExtent[1].toFixed(1)}</span>
+              <span>{ratingExtent[0].toFixed(2)}</span>
+              <span>{ratingExtent[1].toFixed(2)}</span>
             </div>
           </CardBody>
         </Card>
