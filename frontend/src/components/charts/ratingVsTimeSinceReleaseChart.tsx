@@ -3,6 +3,7 @@ import type { DataFrame } from "danfojs";
 import { Card, CardBody, Chip, Tooltip } from "@heroui/react";
 import * as d3 from "d3";
 import { regressionPoly } from "d3-regression";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpTooltip } from "../HelpTooltip";
@@ -14,14 +15,29 @@ export interface RatingVsTimeSinceReleaseChartProps {
   titlesDf?: DataFrame;
 }
 
+export interface TimeSinceReleaseKPIPanelProps {
+  className?: string;
+  ratingsDf?: DataFrame;
+  selectedGenres?: string[];
+  titlesDf?: DataFrame;
+}
+
+// KPI Stats for the panel
+export interface TimeSinceReleaseStats {
+  avgDeltaFirstImpression: number;
+  firstImpressionCount: number;
+  totalCount: number;
+  trend: "down" | "neutral" | "up";
+}
+
 interface AggregatedPoint {
-  avgRating: number;
+  avgRatingDelta: number;
   count: number;
   yearsSinceRelease: number;
 }
 
 interface HoveredPoint {
-  avgRating: number;
+  avgRatingDelta: number;
   count: number;
   x: number;
   y: number;
@@ -60,53 +76,96 @@ export function RatingVsTimeSinceReleaseChart({
     return titleMap;
   }, [titlesDf]);
 
-  // Pre-compute rating data with years since release (only depends on ratingsDf and titleData)
+  // Pre-compute movie average ratings from ratings data
+  const movieAvgRatings = useMemo(() => {
+    if (!ratingsDf) return null;
+
+    const ratingImdbIds = ratingsDf.column("imdbId").values as number[];
+    const ratingValues = ratingsDf.column("rating").values as number[];
+
+    // Calculate average rating per movie
+    const movieStats = new Map<number, { count: number; sum: number }>();
+    for (let i = 0; i < ratingImdbIds.length; i++) {
+      const imdbId = ratingImdbIds[i];
+      const rating = ratingValues[i] / 10; // Convert to 0-10 scale
+      const stats = movieStats.get(imdbId);
+      if (stats) {
+        stats.sum += rating;
+        stats.count += 1;
+      } else {
+        movieStats.set(imdbId, { count: 1, sum: rating });
+      }
+    }
+
+    // Convert to average map
+    const avgMap = new Map<number, number>();
+    for (const [imdbId, stats] of movieStats.entries()) {
+      avgMap.set(imdbId, stats.sum / stats.count);
+    }
+
+    return avgMap;
+  }, [ratingsDf]);
+
+  // Pre-compute rating data with years since release and normalized rating (only depends on ratingsDf, titleData, and movieAvgRatings)
   const ratingData = useMemo(() => {
-    if (!ratingsDf || !titleData) return null;
+    if (!ratingsDf || !titleData || !movieAvgRatings) return null;
 
     const ratingImdbIds = ratingsDf.column("imdbId").values as number[];
     const ratingDates = ratingsDf.column("date").values as unknown[];
     const ratingValues = ratingsDf.column("rating").values as number[];
 
-    // Pre-compute: array of { imdbId, yearsSinceRelease, rating }
+    // Pre-compute: array of { imdbId, yearsSinceRelease, monthsSinceRelease, ratingDelta }
     const result: {
       imdbId: number;
-      rating: number;
+      monthsSinceRelease: number;
+      ratingDelta: number;
       yearsSinceRelease: number;
     }[] = [];
 
     for (let i = 0; i < ratingImdbIds.length; i++) {
       const titleInfo = titleData.get(ratingImdbIds[i]);
-      if (!titleInfo) continue;
+      const movieAvg = movieAvgRatings.get(ratingImdbIds[i]);
+      if (!titleInfo || movieAvg === undefined) continue;
 
-      // Extract year from date (handles different formats: Date object, string, or days since epoch)
+      // Extract year and month from date
       let ratingYear: number;
+      let ratingMonth: number;
       const dateVal = ratingDates[i];
       if (dateVal instanceof Date) {
         ratingYear = dateVal.getFullYear();
+        ratingMonth = dateVal.getMonth();
       } else if (typeof dateVal === "string") {
         ratingYear = parseInt(dateVal.substring(0, 4), 10);
+        ratingMonth = parseInt(dateVal.substring(5, 7), 10) - 1;
       } else if (typeof dateVal === "number") {
         // Days since Unix epoch (1970-01-01)
         const date = new Date(dateVal * 24 * 60 * 60 * 1000);
         ratingYear = date.getFullYear();
+        ratingMonth = date.getMonth();
       } else {
         continue; // Skip invalid dates
       }
 
       const yearsSinceRelease = ratingYear - titleInfo.year;
+      // Calculate months since release (assuming movie released in January of its year)
+      const monthsSinceRelease = yearsSinceRelease * 12 + ratingMonth;
+
+      // Normalize rating by subtracting movie's average
+      const rating = ratingValues[i] / 10; // Convert to 0-10 scale
+      const ratingDelta = rating - movieAvg;
 
       if (yearsSinceRelease >= 0) {
         result.push({
           imdbId: ratingImdbIds[i],
-          rating: ratingValues[i] / 10, // Convert to 0-10 scale
+          monthsSinceRelease,
+          ratingDelta,
           yearsSinceRelease,
         });
       }
     }
 
     return result;
-  }, [ratingsDf, titleData]);
+  }, [ratingsDf, titleData, movieAvgRatings]);
 
   // Calculate aggregated data filtered by selected genres (fast operation)
   const aggregatedData = useMemo(() => {
@@ -118,10 +177,10 @@ export function RatingVsTimeSinceReleaseChart({
     // Aggregate by years since release
     const aggregation = new Map<
       number,
-      { count: number; totalRating: number }
+      { count: number; totalDelta: number }
     >();
 
-    for (const { imdbId, rating, yearsSinceRelease } of ratingData) {
+    for (const { imdbId, ratingDelta, yearsSinceRelease } of ratingData) {
       // Filter by selected genres if any
       if (selectedGenreSet) {
         const titleInfo = titleData.get(imdbId);
@@ -139,10 +198,13 @@ export function RatingVsTimeSinceReleaseChart({
 
       const agg = aggregation.get(yearsSinceRelease);
       if (agg) {
-        agg.totalRating += rating;
+        agg.totalDelta += ratingDelta;
         agg.count += 1;
       } else {
-        aggregation.set(yearsSinceRelease, { count: 1, totalRating: rating });
+        aggregation.set(yearsSinceRelease, {
+          count: 1,
+          totalDelta: ratingDelta,
+        });
       }
     }
 
@@ -151,7 +213,7 @@ export function RatingVsTimeSinceReleaseChart({
     for (const [yearsSinceRelease, agg] of aggregation.entries()) {
       if (agg.count >= 10) {
         points.push({
-          avgRating: agg.totalRating / agg.count,
+          avgRatingDelta: agg.totalDelta / agg.count,
           count: agg.count,
           yearsSinceRelease,
         });
@@ -199,7 +261,7 @@ export function RatingVsTimeSinceReleaseChart({
 
       for (let i = 0; i < aggregatedData.length; i++) {
         const px = xScale(aggregatedData[i].yearsSinceRelease);
-        const py = yScale(aggregatedData[i].avgRating);
+        const py = yScale(aggregatedData[i].avgRatingDelta);
         const dist = Math.hypot(mouseX - px, mouseY - py);
 
         if (dist < closestDist && dist < 30) {
@@ -210,7 +272,7 @@ export function RatingVsTimeSinceReleaseChart({
 
       if (closestIdx >= 0) {
         setHoveredPoint({
-          avgRating: aggregatedData[closestIdx].avgRating,
+          avgRatingDelta: aggregatedData[closestIdx].avgRatingDelta,
           count: aggregatedData[closestIdx].count,
           x: event.clientX - bbox.left + 15,
           y: event.clientY - bbox.top - 10,
@@ -248,9 +310,10 @@ export function RatingVsTimeSinceReleaseChart({
       number,
     ];
     const yMin =
-      Math.floor((d3.min(aggregatedData, (d) => d.avgRating) ?? 0) * 2) / 2;
+      Math.floor((d3.min(aggregatedData, (d) => d.avgRatingDelta) ?? -1) * 4) /
+      4;
     const yMax =
-      Math.ceil((d3.max(aggregatedData, (d) => d.avgRating) ?? 10) * 2) / 2;
+      Math.ceil((d3.max(aggregatedData, (d) => d.avgRatingDelta) ?? 1) * 4) / 4;
 
     const xScale = d3
       .scaleLinear()
@@ -258,9 +321,10 @@ export function RatingVsTimeSinceReleaseChart({
       .range([0, innerWidth])
       .nice();
 
+    // For normalized data, center around 0
     const yScale = d3
       .scaleLinear()
-      .domain([Math.max(0, yMin - 0.5), Math.min(10, yMax + 0.5)])
+      .domain([Math.min(-0.5, yMin - 0.1), Math.max(0.5, yMax + 0.1)])
       .range([innerHeight, 0])
       .nice();
 
@@ -327,6 +391,17 @@ export function RatingVsTimeSinceReleaseChart({
         sel.selectAll(".tick text").attr("fill", "rgba(255,255,255,0.6)");
       });
 
+    // Add zero line for reference
+    chartG
+      .append("line")
+      .attr("x1", 0)
+      .attr("x2", innerWidth)
+      .attr("y1", yScale(0))
+      .attr("y2", yScale(0))
+      .attr("stroke", "rgba(255,255,255,0.3)")
+      .attr("stroke-width", 1)
+      .attr("stroke-dasharray", "4,4");
+
     chartG
       .append("text")
       .attr("fill", "rgba(255,255,255,0.7)")
@@ -335,7 +410,7 @@ export function RatingVsTimeSinceReleaseChart({
       .attr("x", -innerHeight / 2)
       .attr("text-anchor", "middle")
       .attr("font-size", 12)
-      .text("Average Rating");
+      .text("Rating vs Movie Avg");
 
     // Scale point size by count (log scale for better distribution)
     const countExtent = d3.extent(aggregatedData, (d) => d.count) as [
@@ -351,7 +426,7 @@ export function RatingVsTimeSinceReleaseChart({
       .data(aggregatedData)
       .join("circle")
       .attr("cx", (d) => xScale(d.yearsSinceRelease))
-      .attr("cy", (d) => yScale(d.avgRating))
+      .attr("cy", (d) => yScale(d.avgRatingDelta))
       .attr("r", (d) => sizeScale(d.count))
       .attr("fill", pointColor)
       .attr("fill-opacity", 0.6)
@@ -376,16 +451,19 @@ export function RatingVsTimeSinceReleaseChart({
 
     // Build data array for regression
     const regressionData = aggregatedData.map((d) => ({
-      avgRating: d.avgRating,
+      avgRatingDelta: d.avgRatingDelta,
       yearsSinceRelease: d.yearsSinceRelease,
     }));
 
     const regression = regressionPoly()
       .x(
-        (d: { avgRating: number; yearsSinceRelease: number }) =>
+        (d: { avgRatingDelta: number; yearsSinceRelease: number }) =>
           d.yearsSinceRelease,
       )
-      .y((d: { avgRating: number; yearsSinceRelease: number }) => d.avgRating)
+      .y(
+        (d: { avgRatingDelta: number; yearsSinceRelease: number }) =>
+          d.avgRatingDelta,
+      )
       .order(3);
 
     const regressionResult = regression(regressionData);
@@ -478,8 +556,13 @@ export function RatingVsTimeSinceReleaseChart({
                   : `${hoveredPoint.yearsSinceRelease} years after release`}
             </p>
             <div className="flex items-center gap-2 mt-2">
-              <Chip color="primary" size="sm" variant="flat">
-                ★ {hoveredPoint.avgRating.toFixed(2)}
+              <Chip
+                color={hoveredPoint.avgRatingDelta >= 0 ? "success" : "danger"}
+                size="sm"
+                variant="flat"
+              >
+                {hoveredPoint.avgRatingDelta >= 0 ? "+" : ""}
+                {hoveredPoint.avgRatingDelta.toFixed(3)}
               </Chip>
               <Chip color="default" size="sm" variant="flat">
                 {hoveredPoint.count.toLocaleString()} ratings
@@ -492,13 +575,13 @@ export function RatingVsTimeSinceReleaseChart({
       {/* Legend Card with Help */}
       <div className="absolute top-4 right-4 flex items-start gap-2">
         <HelpTooltip
-          description="Each dot represents the average rating given at a specific number of years after a movie's release. Larger dots indicate more ratings. This shows if ratings change over time."
+          description="Each dot represents the normalized average rating (rating minus movie's overall average) at a specific number of years after release. Values above 0 mean higher than average ratings. This shows how perception changes over time."
           interactions={[
             { icon: "👆", text: "Hover points for details" },
             { icon: "🎭", text: "Select genres in the network to filter" },
             { icon: "⚪", text: "Dot size = number of ratings" },
           ]}
-          title="Rating vs Time Since Release"
+          title="Normalized Rating vs Time Since Release"
         />
         <Card className="pointer-events-none bg-black/40 backdrop-blur-md border-white/10">
           <CardBody className="p-4">
@@ -527,12 +610,12 @@ export function RatingVsTimeSinceReleaseChart({
               )}
               <div className="space-y-2">
                 <Tooltip
-                  content="Each dot shows average rating at years after release"
+                  content="Normalized rating (vs movie avg) at years after release"
                   placement="left"
                 >
                   <div className="flex items-center gap-2 cursor-help">
                     <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-cyan-500 to-teal-500" />
-                    <span className="text-gray-300">Avg rating by time</span>
+                    <span className="text-gray-300">Rating delta by time</span>
                   </div>
                 </Tooltip>
                 <Tooltip
@@ -545,6 +628,18 @@ export function RatingVsTimeSinceReleaseChart({
                       className="w-6 h-0.5 rounded bg-cyan-400"
                     />
                     <span className="text-gray-300">Trend line</span>
+                  </div>
+                </Tooltip>
+                <Tooltip
+                  content="Zero line - ratings at this level match movie average"
+                  placement="left"
+                >
+                  <div className="flex items-center gap-2 cursor-help">
+                    <span
+                      aria-hidden
+                      className="w-6 h-0.5 rounded border-b border-dashed border-white/30"
+                    />
+                    <span className="text-gray-300">Movie average</span>
                   </div>
                 </Tooltip>
               </div>
@@ -584,6 +679,241 @@ export function RatingVsTimeSinceReleaseChart({
           </CardBody>
         </Card>
       )}
+    </div>
+  );
+}
+
+// KPI Panel for Time Since Release stats
+export function TimeSinceReleaseKPIPanel({
+  className,
+  ratingsDf,
+  selectedGenres = [],
+  titlesDf,
+}: TimeSinceReleaseKPIPanelProps): React.ReactElement {
+  // Pre-compute title data
+  const titleData = useMemo(() => {
+    if (!titlesDf) return null;
+
+    const titleIds = titlesDf.column("id").values as number[];
+    const titleYears = titlesDf.column("year").values as number[];
+    const titleGenres = titlesDf.column("genres").values as string[];
+
+    const titleMap = new Map<number, { genreSet: Set<string>; year: number }>();
+    for (let i = 0; i < titleIds.length; i++) {
+      titleMap.set(titleIds[i], {
+        genreSet: new Set(titleGenres[i].split(",")),
+        year: titleYears[i],
+      });
+    }
+
+    return titleMap;
+  }, [titlesDf]);
+
+  // Pre-compute movie average ratings
+  const movieAvgRatings = useMemo(() => {
+    if (!ratingsDf) return null;
+
+    const ratingImdbIds = ratingsDf.column("imdbId").values as number[];
+    const ratingValues = ratingsDf.column("rating").values as number[];
+
+    const movieStats = new Map<number, { count: number; sum: number }>();
+    for (let i = 0; i < ratingImdbIds.length; i++) {
+      const imdbId = ratingImdbIds[i];
+      const rating = ratingValues[i] / 10;
+      const stats = movieStats.get(imdbId);
+      if (stats) {
+        stats.sum += rating;
+        stats.count += 1;
+      } else {
+        movieStats.set(imdbId, { count: 1, sum: rating });
+      }
+    }
+
+    const avgMap = new Map<number, number>();
+    for (const [imdbId, stats] of movieStats.entries()) {
+      avgMap.set(imdbId, stats.sum / stats.count);
+    }
+
+    return avgMap;
+  }, [ratingsDf]);
+
+  // Calculate stats for the KPI panel
+  const stats = useMemo((): TimeSinceReleaseStats => {
+    if (!ratingsDf || !titleData || !movieAvgRatings) {
+      return {
+        avgDeltaFirstImpression: 0,
+        firstImpressionCount: 0,
+        totalCount: 0,
+        trend: "neutral",
+      };
+    }
+
+    const ratingImdbIds = ratingsDf.column("imdbId").values as number[];
+    const ratingDates = ratingsDf.column("date").values as unknown[];
+    const ratingValues = ratingsDf.column("rating").values as number[];
+
+    const selectedGenreSet =
+      selectedGenres.length > 0 ? new Set(selectedGenres) : null;
+
+    let firstImpressionSum = 0;
+    let firstImpressionCount = 0;
+    let totalCount = 0;
+
+    for (let i = 0; i < ratingImdbIds.length; i++) {
+      const imdbId = ratingImdbIds[i];
+      const titleInfo = titleData.get(imdbId);
+      const movieAvg = movieAvgRatings.get(imdbId);
+      if (!titleInfo || movieAvg === undefined) continue;
+
+      // Filter by selected genres
+      if (selectedGenreSet) {
+        let hasAllGenres = true;
+        for (const g of selectedGenreSet) {
+          if (!titleInfo.genreSet.has(g)) {
+            hasAllGenres = false;
+            break;
+          }
+        }
+        if (!hasAllGenres) continue;
+      }
+
+      // Extract date info
+      let ratingYear: number;
+      let ratingMonth: number;
+      const dateVal = ratingDates[i];
+      if (dateVal instanceof Date) {
+        ratingYear = dateVal.getFullYear();
+        ratingMonth = dateVal.getMonth();
+      } else if (typeof dateVal === "string") {
+        ratingYear = parseInt(dateVal.substring(0, 4), 10);
+        ratingMonth = parseInt(dateVal.substring(5, 7), 10) - 1;
+      } else if (typeof dateVal === "number") {
+        const date = new Date(dateVal * 24 * 60 * 60 * 1000);
+        ratingYear = date.getFullYear();
+        ratingMonth = date.getMonth();
+      } else {
+        continue;
+      }
+
+      const yearsSinceRelease = ratingYear - titleInfo.year;
+      if (yearsSinceRelease < 0) continue;
+
+      totalCount += 1;
+
+      const monthsSinceRelease = yearsSinceRelease * 12 + ratingMonth;
+      const rating = ratingValues[i] / 10;
+      const ratingDelta = rating - movieAvg;
+
+      // First 2 months = first impression
+      if (monthsSinceRelease <= 2) {
+        firstImpressionSum += ratingDelta;
+        firstImpressionCount += 1;
+      }
+    }
+
+    const avgDeltaFirstImpression =
+      firstImpressionCount > 0 ? firstImpressionSum / firstImpressionCount : 0;
+
+    let trend: "down" | "neutral" | "up" = "neutral";
+    if (Math.abs(avgDeltaFirstImpression) > 0.02) {
+      trend = avgDeltaFirstImpression > 0 ? "up" : "down";
+    }
+
+    return { avgDeltaFirstImpression, firstImpressionCount, totalCount, trend };
+  }, [ratingsDf, titleData, movieAvgRatings, selectedGenres]);
+
+  const formatDelta = (value: number): string => {
+    const sign = value >= 0 ? "+" : "";
+    return `${sign}${value.toFixed(3)}`;
+  };
+
+  return (
+    <div className={["flex flex-col gap-4", className ?? ""].join(" ")}>
+      {/* First Impression vs Global Average */}
+      <Card className="bg-black/40 backdrop-blur-md border-white/10">
+        <CardBody className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            {stats.trend === "up" ? (
+              <TrendingUp className="w-5 h-5 text-green-400" />
+            ) : stats.trend === "down" ? (
+              <TrendingDown className="w-5 h-5 text-red-400" />
+            ) : (
+              <div className="w-5 h-5 flex items-center justify-center text-gray-400">
+                —
+              </div>
+            )}
+            <span className="text-sm font-medium text-white/90">
+              First Impression Effect
+            </span>
+          </div>
+          <div className="space-y-4">
+            <div className="text-center py-3">
+              <div className="text-xs text-gray-400 mb-2">
+                First 2 months vs all-time average
+              </div>
+              <span
+                className={`text-3xl font-bold font-mono ${stats.avgDeltaFirstImpression >= 0 ? "text-green-400" : "text-red-400"}`}
+              >
+                {formatDelta(stats.avgDeltaFirstImpression)}
+              </span>
+            </div>
+            <div className="border-t border-white/10 pt-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-400">First impression ratings</span>
+                <span className="text-cyan-400 font-mono">
+                  {stats.firstImpressionCount.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs mt-2">
+                <span className="text-gray-400">Total ratings</span>
+                <span className="text-gray-300 font-mono">
+                  {stats.totalCount.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Interpretation Card */}
+      <Card className="bg-black/40 backdrop-blur-md border-white/10">
+        <CardBody className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">💡</span>
+            <span className="text-sm font-medium text-white/90">
+              Interpretation
+            </span>
+          </div>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            {stats.trend === "up" ? (
+              <>
+                First impressions are{" "}
+                <span className="text-green-400 font-medium">
+                  more positive
+                </span>{" "}
+                than later ratings. Early viewers rate movies{" "}
+                {Math.abs(stats.avgDeltaFirstImpression).toFixed(3)} points
+                higher relative to the movie&apos;s overall average.
+              </>
+            ) : stats.trend === "down" ? (
+              <>
+                First impressions are{" "}
+                <span className="text-red-400 font-medium">more negative</span>{" "}
+                than later ratings. Early viewers rate movies{" "}
+                {Math.abs(stats.avgDeltaFirstImpression).toFixed(3)} points
+                lower relative to the movie&apos;s overall average.
+              </>
+            ) : (
+              <>
+                First impressions are{" "}
+                <span className="text-gray-300 font-medium">neutral</span>.
+                Early ratings closely match the movie&apos;s overall average,
+                showing no significant bias.
+              </>
+            )}
+          </p>
+        </CardBody>
+      </Card>
     </div>
   );
 }
