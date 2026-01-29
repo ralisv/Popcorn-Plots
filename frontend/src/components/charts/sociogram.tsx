@@ -11,12 +11,6 @@ const LINK_WIDTH_RANGE: [number, number] = [1, 10];
 /** The minimum and maximum opacity for links. */
 const LINK_OPACITY_RANGE: [number, number] = [0.2, 0.8];
 
-/** The minimum and maximum strength of the links' gravitational pull. */
-const LINK_STRENGTH_RANGE: [number, number] = [0.05, 1];
-
-/** The strength of the charge force between nodes. A negative value pushes nodes apart. */
-const NODE_CHARGE_STRENGTH = -800;
-
 /** The target distance between linked nodes. */
 const LINK_DISTANCE = 120;
 
@@ -31,6 +25,35 @@ const ZOOM_EXTENT: [number, number] = [0.1, 8];
 
 /** The duration of the hover transition in milliseconds. */
 const HOVER_TRANSITION_DURATION = 300;
+
+// --- Force Strength Constants (all normalized 0-1) ---
+
+/**
+ * Base symmetric link force strength (0-1).
+ * Controls how strongly all linked nodes are pulled together symmetrically.
+ * Higher = nodes cluster more tightly along links.
+ */
+const SYMMETRIC_LINK_STRENGTH = 1;
+
+/**
+ * Controls how strongly nodes push each other apart.
+ */
+const CHARGE_STRENGTH = -2000;
+
+/** Maximum distance (in pixels) for charge force to apply. */
+const CHARGE_MAX_DISTANCE = 1000;
+
+/** Strength of the centering force (0-1). Keeps the graph centered. */
+const CENTER_STRENGTH = 0.05;
+
+/** Strength of the collision force (0-1). Prevents node overlap. */
+const COLLISION_STRENGTH = 0.8;
+
+/** Velocity decay (0-1). Higher = more damping/stability, lower = more inertia. */
+const VELOCITY_DECAY = 0.3;
+
+/** Alpha decay rate. Higher = faster settling, lower = longer simulation. */
+const ALPHA_DECAY = 0.01;
 
 export interface SociogramProps {
   className?: string;
@@ -200,11 +223,6 @@ export function Sociogram({
       .scaleLinear()
       .domain([0, maxLinkValue])
       .range(LINK_WIDTH_RANGE);
-
-    const linkStrengthScale = d3
-      .scaleLinear()
-      .domain([0, maxLinkValue])
-      .range(LINK_STRENGTH_RANGE);
 
     const linkHighlightColorScale = d3
       .scaleLinear<string>()
@@ -451,29 +469,54 @@ export function Sociogram({
       .attr("pointer-events", "none")
       .attr("class", "select-none");
 
+    // Build a map from node id to node for quick lookups
+    const nodeById = new Map(dataNodes.map((n) => [n.id, n]));
+
+    // Create the standard forceLink - this handles visual link updates
+    // Strength is based on the mutual dependency percentage
+    const linkForce = d3
+      .forceLink<GenreNodeDatum, GenreLinkDatum>(dataLinks)
+      .id((d) => d.id)
+      .distance(LINK_DISTANCE)
+      .strength((d) => {
+        const source =
+          typeof d.source === "string" ? nodeById.get(d.source) : d.source;
+        const target =
+          typeof d.target === "string" ? nodeById.get(d.target) : d.target;
+        if (!source || !target) return SYMMETRIC_LINK_STRENGTH * 0.1;
+
+        // Use minimum percentage - the weaker side's dependency
+        // This is already 0-1 normalized
+        const sourcePercentage = d.value / source.count;
+        const targetPercentage = d.value / target.count;
+        const percentage = Math.max(sourcePercentage, targetPercentage);
+
+        // Scale by the constant (minPercentage is 0-1, result is 0 to SYMMETRIC_LINK_STRENGTH)
+        return SYMMETRIC_LINK_STRENGTH * percentage;
+      });
+
     const simulation = d3
       .forceSimulation<GenreNodeDatum>(dataNodes)
-      .velocityDecay(0.15) // Lower = more inertia (default 0.4)
-      .alphaDecay(0.01) // Slower cooldown for smoother settling
-      .force(
-        "link",
-        d3
-          .forceLink<GenreNodeDatum, GenreLinkDatum>(dataLinks)
-          .id((d) => d.id)
-          .distance(LINK_DISTANCE)
-          .strength((d) => linkStrengthScale(d.value)),
-      )
+      .velocityDecay(VELOCITY_DECAY)
+      .alphaDecay(ALPHA_DECAY)
+      .force("link", linkForce)
       .force(
         "charge",
-        d3.forceManyBody().strength(NODE_CHARGE_STRENGTH).distanceMax(400),
+        d3
+          .forceManyBody()
+          .strength(CHARGE_STRENGTH)
+          .distanceMax(CHARGE_MAX_DISTANCE),
       )
-      .force("center", d3.forceCenter(width / 2, height / 2).strength(0.05))
+      .force(
+        "center",
+        d3.forceCenter(width / 2, height / 2).strength(CENTER_STRENGTH),
+      )
       .force(
         "collide",
         d3
           .forceCollide<GenreNodeDatum>()
           .radius((d) => nodeSizeScale(d.count) + NODE_COLLISION_PADDING)
-          .strength(0.8)
+          .strength(COLLISION_STRENGTH)
           .iterations(2),
       )
       .on("tick", () => {
