@@ -249,7 +249,7 @@ export function RatingVsTimeSinceReleaseChart({
   // Determine if we should show monthly or yearly view based on range
   const useMonthlyView = useMemo(() => {
     if (xRangeMin === null || xRangeMax === null) return false;
-    return xRangeMax - xRangeMin < 3;
+    return xRangeMax - xRangeMin < 6;
   }, [xRangeMin, xRangeMax]);
 
   // Filter and optionally re-aggregate data by x-axis range
@@ -793,8 +793,8 @@ export function RatingVsTimeSinceReleaseChart({
 
       {/* X-Axis Range Slider */}
       <RangeSlider
-        defaultMax={xFullExtent.max}
-        defaultMin={xFullExtent.min}
+        defaultMax={45}
+        defaultMin={0}
         formatValue={(v) => `${v}y`}
         label="Years Since Release"
         max={xFullExtent.max}
