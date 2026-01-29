@@ -6,6 +6,7 @@ import { regressionPoly } from "d3-regression";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpTooltip } from "../HelpTooltip";
+import { RangeSlider } from "../RangeSlider";
 
 export interface RatingVsRuntimeChartProps {
   className?: string;
@@ -30,16 +31,11 @@ export interface RuntimeStats {
   totalMovies: number;
 }
 
-interface AggregatedPoint {
-  avgRating: number;
-  count: number;
-  runtime: number;
-}
-
 interface HoveredPoint {
   avgRating: number;
-  count: number;
+  genres: string;
   runtime: number;
+  title: string;
   x: number;
   y: number;
 }
@@ -55,19 +51,23 @@ export function RatingVsRuntimeChart({
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
   const [hoveredPoint, setHoveredPoint] = useState<HoveredPoint | null>(null);
 
-  // Extract and aggregate data from DataFrame by runtime
-  const aggregatedData = useMemo(() => {
-    if (!df) return [];
+  // X-axis range filter state
+  const [xRangeMin, setXRangeMin] = useState<number>(60);
+  const [xRangeMax, setXRangeMax] = useState<number>(180);
+
+  // Extract all filtered data from DataFrame (individual movies) - without x-range filter
+  const allData = useMemo(() => {
+    if (!df) return { avgRatings: [], genres: [], runtimes: [], titles: [] };
 
     const allGenres = df.column("genres").values as string[];
     const allRuntimes = df.column("runtimeMinutes").values as number[];
     const allRatings = df.column("avgRating").values as number[];
+    const allTitles = df.column("title").values as string[];
 
-    // Aggregate by runtime (rounded to nearest 5 minutes for smoother visualization)
-    const aggregation = new Map<
-      number,
-      { count: number; totalRating: number }
-    >();
+    const filteredRuntimes: number[] = [];
+    const filteredRatings: number[] = [];
+    const filteredTitles: string[] = [];
+    const filteredGenres: string[] = [];
 
     for (let i = 0; i < allGenres.length; i++) {
       const runtime = allRuntimes[i];
@@ -80,36 +80,67 @@ export function RatingVsRuntimeChart({
         if (!selectedGenres.every((g) => titleGenres.includes(g))) continue;
       }
 
-      // Round runtime to nearest 5 minutes for aggregation
-      const roundedRuntime = Math.round(runtime / 5) * 5;
-
-      const agg = aggregation.get(roundedRuntime);
-      if (agg) {
-        agg.totalRating += allRatings[i];
-        agg.count += 1;
-      } else {
-        aggregation.set(roundedRuntime, {
-          count: 1,
-          totalRating: allRatings[i],
-        });
-      }
+      filteredRuntimes.push(runtime);
+      filteredRatings.push(allRatings[i]);
+      filteredTitles.push(allTitles[i]);
+      filteredGenres.push(allGenres[i]);
     }
 
-    // Convert to array of points, filtering to runtimes with at least 5 movies
-    const points: AggregatedPoint[] = [];
-    for (const [runtime, agg] of aggregation.entries()) {
-      if (agg.count >= 5) {
-        points.push({
-          avgRating: agg.totalRating / agg.count,
-          count: agg.count,
-          runtime,
-        });
-      }
-    }
-
-    points.sort((a, b) => a.runtime - b.runtime);
-    return points;
+    return {
+      avgRatings: filteredRatings,
+      genres: filteredGenres,
+      runtimes: filteredRuntimes,
+      titles: filteredTitles,
+    };
   }, [df, selectedGenres]);
+
+  // Calculate full x-axis extent from all data
+  const xFullExtent = useMemo(() => {
+    if (allData.runtimes.length === 0) return { max: 180, min: 60 };
+    const extent = d3.extent(allData.runtimes) as [number, number];
+    return { max: extent[1], min: extent[0] };
+  }, [allData.runtimes]);
+
+  // Apply x-range filter to get displayed data
+  const { avgRatings, genres, runtimes, titles } = useMemo(() => {
+    const filteredRuntimes: number[] = [];
+    const filteredRatings: number[] = [];
+    const filteredTitles: string[] = [];
+    const filteredGenres: string[] = [];
+
+    for (let i = 0; i < allData.runtimes.length; i++) {
+      const runtime = allData.runtimes[i];
+      if (runtime >= xRangeMin && runtime <= xRangeMax) {
+        filteredRuntimes.push(runtime);
+        filteredRatings.push(allData.avgRatings[i]);
+        filteredTitles.push(allData.titles[i]);
+        filteredGenres.push(allData.genres[i]);
+      }
+    }
+
+    return {
+      avgRatings: filteredRatings,
+      genres: filteredGenres,
+      runtimes: filteredRuntimes,
+      titles: filteredTitles,
+    };
+  }, [allData, xRangeMin, xRangeMax]);
+
+  // Handler for range slider changes
+  const handleRangeChange = useCallback((min: number, max: number) => {
+    setXRangeMin(min);
+    setXRangeMax(max);
+  }, []);
+
+  // Generate seeded random jitter for each point (stable across re-renders)
+  // Jitter within ±2 minutes to spread points horizontally
+  const jitterValues = useMemo(() => {
+    const jitterSeed = 54321;
+    return runtimes.map((_, i) => {
+      const x = Math.sin(jitterSeed + i * 9999) * 10000;
+      return (x - Math.floor(x)) * 4 - 2; // Range: -2 to +2 minutes
+    });
+  }, [runtimes]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -142,13 +173,13 @@ export function RatingVsRuntimeChart({
       const mouseX = event.clientX - bbox.left - margin.left;
       const mouseY = event.clientY - bbox.top - margin.top;
 
-      // Find closest point
+      // Find closest point (using jittered x positions)
       let closestIdx = -1;
       let closestDist = Infinity;
 
-      for (let i = 0; i < aggregatedData.length; i++) {
-        const px = xScale(aggregatedData[i].runtime);
-        const py = yScale(aggregatedData[i].avgRating);
+      for (let i = 0; i < runtimes.length; i++) {
+        const px = xScale(runtimes[i] + jitterValues[i]);
+        const py = yScale(avgRatings[i]);
         const dist = Math.hypot(mouseX - px, mouseY - py);
 
         if (dist < closestDist && dist < 30) {
@@ -159,9 +190,10 @@ export function RatingVsRuntimeChart({
 
       if (closestIdx >= 0) {
         setHoveredPoint({
-          avgRating: aggregatedData[closestIdx].avgRating,
-          count: aggregatedData[closestIdx].count,
-          runtime: aggregatedData[closestIdx].runtime,
+          avgRating: avgRatings[closestIdx],
+          genres: genres[closestIdx],
+          runtime: runtimes[closestIdx],
+          title: titles[closestIdx],
           x: event.clientX - bbox.left + 15,
           y: event.clientY - bbox.top - 10,
         });
@@ -169,13 +201,13 @@ export function RatingVsRuntimeChart({
         setHoveredPoint(null);
       }
     },
-    [aggregatedData],
+    [runtimes, avgRatings, titles, genres, jitterValues],
   );
 
   useEffect(() => {
     const { height, width } = dimensions;
     if (!svgRef.current || !gRef.current || width === 0 || height === 0) return;
-    if (aggregatedData.length === 0) return;
+    if (runtimes.length === 0) return;
 
     const svg = d3.select(svgRef.current);
     const g = d3.select(gRef.current);
@@ -192,18 +224,13 @@ export function RatingVsRuntimeChart({
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
     // Calculate domains
-    const xExtent = d3.extent(aggregatedData, (d) => d.runtime) as [
-      number,
-      number,
-    ];
-    const yMin =
-      Math.floor((d3.min(aggregatedData, (d) => d.avgRating) ?? 0) * 2) / 2;
-    const yMax =
-      Math.ceil((d3.max(aggregatedData, (d) => d.avgRating) ?? 10) * 2) / 2;
+    const xExtent = d3.extent(runtimes) as [number, number];
+    const yMin = Math.floor((d3.min(avgRatings) ?? 0) * 2) / 2;
+    const yMax = Math.ceil((d3.max(avgRatings) ?? 10) * 2) / 2;
 
     const xScale = d3
       .scaleLinear()
-      .domain([0, xExtent[1]])
+      .domain([xExtent[0], xExtent[1]])
       .range([0, innerWidth])
       .nice();
 
@@ -286,53 +313,49 @@ export function RatingVsRuntimeChart({
       .attr("font-size", 12)
       .text("Average Rating");
 
-    // Scale point size by count (log scale for better distribution)
-    const countExtent = d3.extent(aggregatedData, (d) => d.count) as [
-      number,
-      number,
-    ];
-    const sizeScale = d3.scaleSqrt().domain(countExtent).range([3, 12]);
-
+    // Create index array for data binding
+    const indices = d3.range(runtimes.length);
     const pointColor = "#10b981"; // Emerald color
 
     chartG
       .selectAll("circle")
-      .data(aggregatedData)
+      .data(indices)
       .join("circle")
-      .attr("cx", (d) => xScale(d.runtime))
-      .attr("cy", (d) => yScale(d.avgRating))
-      .attr("r", (d) => sizeScale(d.count))
+      .attr("cx", (i) => xScale(runtimes[i] + jitterValues[i]))
+      .attr("cy", (i) => yScale(avgRatings[i]))
+      .attr("r", 2)
       .attr("fill", pointColor)
-      .attr("fill-opacity", 0.6)
+      .attr("fill-opacity", 0.5)
       .attr("stroke", pointColor)
-      .attr("stroke-width", 1)
+      .attr("stroke-width", 0)
       .style("cursor", "pointer")
       .on("mouseenter", function () {
         d3.select(this)
           .transition()
           .duration(150)
+          .attr("r", 8)
           .attr("fill-opacity", 0.9)
           .attr("stroke-width", 2);
       })
-      .on("mouseleave", function (_, d) {
+      .on("mouseleave", function () {
         d3.select(this)
           .transition()
           .duration(150)
-          .attr("r", sizeScale(d.count))
-          .attr("fill-opacity", 0.6)
-          .attr("stroke-width", 1);
+          .attr("r", 2)
+          .attr("fill-opacity", 0.5)
+          .attr("stroke-width", 0);
       });
 
     // Build data array for regression
-    const regressionData = aggregatedData.map((d) => ({
-      avgRating: d.avgRating,
-      runtime: d.runtime,
+    const regressionData = indices.map((i) => ({
+      avgRating: avgRatings[i],
+      runtime: runtimes[i],
     }));
 
     const regression = regressionPoly()
       .x((d: { avgRating: number; runtime: number }) => d.runtime)
       .y((d: { avgRating: number; runtime: number }) => d.avgRating)
-      .order(3);
+      .order(4);
 
     const regressionResult = regression(regressionData);
 
@@ -378,12 +401,15 @@ export function RatingVsRuntimeChart({
       .on("mouseleave", () => {
         setHoveredPoint(null);
       });
-  }, [aggregatedData, dimensions, handleMouseMove]);
-
-  const totalMovies = useMemo(
-    () => aggregatedData.reduce((sum, d) => sum + d.count, 0),
-    [aggregatedData],
-  );
+  }, [
+    avgRatings,
+    genres,
+    titles,
+    runtimes,
+    jitterValues,
+    dimensions,
+    handleMouseMove,
+  ]);
 
   return (
     <div
@@ -392,140 +418,157 @@ export function RatingVsRuntimeChart({
         "w-full",
         "h-full",
         "overflow-hidden",
+        "flex",
+        "flex-col",
         className ?? "",
       ].join(" ")}
-      ref={containerRef}
     >
-      <svg
-        aria-label="Rating vs Runtime Scatter Plot"
-        className="w-full h-full"
-        ref={svgRef}
-        role="img"
-        viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
-      >
-        <g ref={gRef} />
-      </svg>
-
-      {/* Hover Tooltip */}
-      {hoveredPoint && (
-        <Card
-          className="pointer-events-none absolute z-40 bg-black/80 backdrop-blur-md border-white/10 max-w-xs"
-          style={{
-            left: Math.min(hoveredPoint.x, dimensions.width - 200),
-            top: Math.min(hoveredPoint.y, dimensions.height - 120),
-          }}
+      <div className="flex-grow relative" ref={containerRef}>
+        <svg
+          aria-label="Rating vs Runtime Scatter Plot"
+          className="w-full h-full"
+          ref={svgRef}
+          role="img"
+          viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
         >
-          <CardBody className="p-3">
-            <p className="font-semibold text-sm text-white">
-              {hoveredPoint.runtime} minutes
-            </p>
-            <div className="flex items-center gap-2 mt-2">
-              <Chip color="warning" size="sm" variant="flat">
-                ★ {hoveredPoint.avgRating.toFixed(2)}
-              </Chip>
-              <Chip color="default" size="sm" variant="flat">
-                {hoveredPoint.count.toLocaleString()} movies
-              </Chip>
-            </div>
-          </CardBody>
-        </Card>
-      )}
+          <g ref={gRef} />
+        </svg>
 
-      {/* Legend Card with Help */}
-      <div className="absolute top-4 right-4 flex items-start gap-2">
-        <HelpTooltip
-          description="Each dot represents the average rating of movies with a specific runtime (grouped by 5-minute intervals). This shows how movie length correlates with viewer ratings."
-          interactions={[
-            { icon: "👆", text: "Hover points for details" },
-            { icon: "🎭", text: "Select genres in the network to filter" },
-            { icon: "⚪", text: "Dot size = number of movies" },
-          ]}
-          title="Rating vs Runtime"
-        />
-        <Card className="pointer-events-none bg-black/40 backdrop-blur-md border-white/10">
-          <CardBody className="p-4">
-            <div className="flex flex-col gap-3 text-xs">
-              {selectedGenres.length > 0 && (
-                <div className="pb-3 border-b border-white/10">
-                  <div className="text-[10px] text-gray-400 mb-2">
-                    Filtered by:
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {selectedGenres.map((genre) => (
-                      <Chip
-                        color="secondary"
-                        key={genre}
-                        size="sm"
-                        variant="flat"
-                      >
-                        {genre}
-                      </Chip>
-                    ))}
-                  </div>
-                  <div className="text-[10px] text-gray-500 mt-2">
-                    {totalMovies.toLocaleString()} movies
-                  </div>
-                </div>
-              )}
-              <div className="space-y-2">
-                <Tooltip
-                  content="Average rating at each runtime (5-min intervals)"
-                  placement="left"
-                >
-                  <div className="flex items-center gap-2 cursor-help">
-                    <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500" />
-                    <span className="text-gray-300">Avg rating by runtime</span>
-                  </div>
-                </Tooltip>
-                <Tooltip
-                  content="Polynomial regression showing the overall trend"
-                  placement="left"
-                >
-                  <div className="flex items-center gap-2 cursor-help">
-                    <span
-                      aria-hidden
-                      className="w-6 h-0.5 rounded bg-emerald-400"
-                    />
-                    <span className="text-gray-300">Trend line</span>
-                  </div>
-                </Tooltip>
+        {/* Hover Tooltip */}
+        {hoveredPoint && (
+          <Card
+            className="pointer-events-none absolute z-40 bg-black/80 backdrop-blur-md border-white/10 max-w-xs"
+            style={{
+              left: Math.min(hoveredPoint.x, dimensions.width - 200),
+              top: Math.min(hoveredPoint.y, dimensions.height - 120),
+            }}
+          >
+            <CardBody className="p-3">
+              <p className="font-semibold text-sm text-white truncate">
+                {hoveredPoint.title}
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <Chip color="secondary" size="sm" variant="flat">
+                  {hoveredPoint.runtime}m
+                </Chip>
+                <Chip color="warning" size="sm" variant="flat">
+                  ★ {hoveredPoint.avgRating.toFixed(2)}
+                </Chip>
               </div>
-            </div>
-          </CardBody>
-        </Card>
+              <p className="text-[11px] text-gray-400 mt-2">
+                {hoveredPoint.genres.replace(/,/g, " • ")}
+              </p>
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Legend Card with Help */}
+        <div className="absolute top-4 right-4 flex items-start gap-2">
+          <HelpTooltip
+            description="Each dot represents a movie plotted by its runtime and average user rating. The trend line shows how ratings correlate with movie length."
+            interactions={[
+              { icon: "👆", text: "Hover points for movie details" },
+              { icon: "🎭", text: "Select genres in the network to filter" },
+            ]}
+            title="Rating vs Runtime"
+          />
+          <Card className="pointer-events-none bg-black/40 backdrop-blur-md border-white/10">
+            <CardBody className="p-4">
+              <div className="flex flex-col gap-3 text-xs">
+                {selectedGenres.length > 0 && (
+                  <div className="pb-3 border-b border-white/10">
+                    <div className="text-[10px] text-gray-400 mb-2">
+                      Filtered by:
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedGenres.map((genre) => (
+                        <Chip
+                          color="secondary"
+                          key={genre}
+                          size="sm"
+                          variant="flat"
+                        >
+                          {genre}
+                        </Chip>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-2">
+                      {runtimes.length.toLocaleString()} movies
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Tooltip
+                    content="Each dot represents a movie's average rating"
+                    placement="left"
+                  >
+                    <div className="flex items-center gap-2 cursor-help">
+                      <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500" />
+                      <span className="text-gray-300">Movie rating</span>
+                    </div>
+                  </Tooltip>
+                  <Tooltip
+                    content="Polynomial regression showing the overall trend"
+                    placement="left"
+                  >
+                    <div className="flex items-center gap-2 cursor-help">
+                      <span
+                        aria-hidden
+                        className="w-6 h-0.5 rounded bg-emerald-400"
+                      />
+                      <span className="text-gray-300">Trend line</span>
+                    </div>
+                  </Tooltip>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+
+        {runtimes.length === 0 && selectedGenres.length > 0 && (
+          <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
+            <CardBody className="p-8 text-center">
+              <div className="text-4xl mb-4">🔍</div>
+              <p className="text-sm text-gray-400">
+                No movies found with all selected genres:
+              </p>
+              <div className="flex flex-wrap gap-1 justify-center mt-3">
+                {selectedGenres.map((genre) => (
+                  <Chip color="secondary" key={genre} size="sm" variant="flat">
+                    {genre}
+                  </Chip>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-3">
+                Try selecting fewer genres
+              </p>
+            </CardBody>
+          </Card>
+        )}
+
+        {runtimes.length === 0 && selectedGenres.length === 0 && (
+          <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
+            <CardBody className="p-8 text-center">
+              <div className="text-4xl mb-4">📭</div>
+              <p className="text-sm text-gray-400">
+                No movie data available to visualize
+              </p>
+            </CardBody>
+          </Card>
+        )}
       </div>
 
-      {aggregatedData.length === 0 && selectedGenres.length > 0 && (
-        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
-          <CardBody className="p-8 text-center">
-            <div className="text-4xl mb-4">🔍</div>
-            <p className="text-sm text-gray-400">
-              No movies found with all selected genres:
-            </p>
-            <div className="flex flex-wrap gap-1 justify-center mt-3">
-              {selectedGenres.map((genre) => (
-                <Chip color="secondary" key={genre} size="sm" variant="flat">
-                  {genre}
-                </Chip>
-              ))}
-            </div>
-            <p className="text-xs text-gray-500 mt-3">
-              Try selecting fewer genres
-            </p>
-          </CardBody>
-        </Card>
-      )}
-
-      {aggregatedData.length === 0 && selectedGenres.length === 0 && (
-        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
-          <CardBody className="p-8 text-center">
-            <div className="text-4xl mb-4">📭</div>
-            <p className="text-sm text-gray-400">
-              No movie data available to visualize
-            </p>
-          </CardBody>
-        </Card>
-      )}
+      {/* X-Axis Range Slider */}
+      <RangeSlider
+        defaultMax={180}
+        defaultMin={60}
+        formatValue={(v) => `${v}m`}
+        label="Runtime"
+        max={xFullExtent.max}
+        min={xFullExtent.min}
+        onRangeChange={handleRangeChange}
+        step={5}
+      />
     </div>
   );
 }

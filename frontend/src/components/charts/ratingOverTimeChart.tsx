@@ -6,6 +6,7 @@ import { regressionPoly } from "d3-regression";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpTooltip } from "../HelpTooltip";
+import { RangeSlider } from "../RangeSlider";
 
 export interface RatingOverTimeChartProps {
   className?: string;
@@ -33,8 +34,12 @@ export function RatingOverTimeChart({
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
   const [hoveredPoint, setHoveredPoint] = useState<HoveredPoint | null>(null);
 
-  // Extract filtered data from DataFrame
-  const { avgRatings, genres, titles, years } = useMemo(() => {
+  // X-axis range filter state
+  const [xRangeMin, setXRangeMin] = useState<number | null>(null);
+  const [xRangeMax, setXRangeMax] = useState<number | null>(null);
+
+  // Extract all filtered data from DataFrame (without x-range filter)
+  const allData = useMemo(() => {
     if (!df) return { avgRatings: [], genres: [], titles: [], years: [] };
 
     const allGenres = df.column("genres").values as string[];
@@ -74,6 +79,53 @@ export function RatingOverTimeChart({
       years: filteredYears,
     };
   }, [df, selectedGenres]);
+
+  // Calculate full x-axis extent from all data
+  const xFullExtent = useMemo(() => {
+    if (allData.years.length === 0) return { max: 2025, min: 1900 };
+    const extent = d3.extent(allData.years) as [number, number];
+    return { max: extent[1], min: extent[0] };
+  }, [allData.years]);
+
+  // Initialize range to full extent when data changes
+  useEffect(() => {
+    setXRangeMin(xFullExtent.min);
+    setXRangeMax(xFullExtent.max);
+  }, [xFullExtent.min, xFullExtent.max]);
+
+  // Apply x-range filter to get displayed data
+  const { avgRatings, genres, titles, years } = useMemo(() => {
+    const effectiveMin = xRangeMin ?? xFullExtent.min;
+    const effectiveMax = xRangeMax ?? xFullExtent.max;
+
+    const filteredYears: number[] = [];
+    const filteredRatings: number[] = [];
+    const filteredTitles: string[] = [];
+    const filteredGenres: string[] = [];
+
+    for (let i = 0; i < allData.years.length; i++) {
+      const year = allData.years[i];
+      if (year >= effectiveMin && year <= effectiveMax) {
+        filteredYears.push(year);
+        filteredRatings.push(allData.avgRatings[i]);
+        filteredTitles.push(allData.titles[i]);
+        filteredGenres.push(allData.genres[i]);
+      }
+    }
+
+    return {
+      avgRatings: filteredRatings,
+      genres: filteredGenres,
+      titles: filteredTitles,
+      years: filteredYears,
+    };
+  }, [allData, xRangeMin, xRangeMax, xFullExtent]);
+
+  // Handler for range slider changes
+  const handleRangeChange = useCallback((min: number, max: number) => {
+    setXRangeMin(min);
+    setXRangeMax(max);
+  }, []);
 
   // Generate seeded random jitter for each point (stable across re-renders)
   // Jitter within ±0.4 of a year to spread points horizontally
@@ -353,142 +405,157 @@ export function RatingOverTimeChart({
         "w-full",
         "h-full",
         "overflow-hidden",
+        "flex",
+        "flex-col",
         className ?? "",
       ].join(" ")}
-      ref={containerRef}
     >
-      <svg
-        aria-label="Rating Over Time Scatter Plot"
-        className="w-full h-full"
-        ref={svgRef}
-        role="img"
-        viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
-      >
-        <g ref={gRef} />
-      </svg>
-
-      {/* Hover Tooltip */}
-      {hoveredPoint && (
-        <Card
-          className="pointer-events-none absolute z-40 bg-black/80 backdrop-blur-md border-white/10 max-w-xs"
-          style={{
-            left: Math.min(hoveredPoint.x, dimensions.width - 200),
-            top: Math.min(hoveredPoint.y, dimensions.height - 120),
-          }}
+      <div className="flex-grow relative" ref={containerRef}>
+        <svg
+          aria-label="Rating Over Time Scatter Plot"
+          className="w-full h-full"
+          ref={svgRef}
+          role="img"
+          viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
         >
-          <CardBody className="p-3">
-            <p className="font-semibold text-sm text-white truncate">
-              {hoveredPoint.title}
-            </p>
-            <div className="flex items-center gap-2 mt-2">
-              <Chip color="secondary" size="sm" variant="flat">
-                {hoveredPoint.year}
-              </Chip>
-              <Chip color="warning" size="sm" variant="flat">
-                ★ {hoveredPoint.avgRating.toFixed(2)}
-              </Chip>
-            </div>
-            <p className="text-[11px] text-gray-400 mt-2">
-              {hoveredPoint.genres.replace(/,/g, " • ")}
-            </p>
-          </CardBody>
-        </Card>
-      )}
+          <g ref={gRef} />
+        </svg>
 
-      {/* Legend Card with Help */}
-      <div className="absolute top-4 right-4 flex items-start gap-2">
-        <HelpTooltip
-          description="Each dot represents a movie plotted by its release year and average user rating. The trend line shows how ratings have changed over time."
-          interactions={[
-            { icon: "👆", text: "Hover points for movie details" },
-            { icon: "🎭", text: "Select genres in the network to filter" },
-          ]}
-          title="Ratings Over Time"
-        />
-        <Card className="pointer-events-none bg-black/40 backdrop-blur-md border-white/10">
-          <CardBody className="p-4">
-            <div className="flex flex-col gap-3 text-xs">
-              {selectedGenres.length > 0 && (
-                <div className="pb-3 border-b border-white/10">
-                  <div className="text-[10px] text-gray-400 mb-2">
-                    Filtered by:
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {selectedGenres.map((genre) => (
-                      <Chip
-                        color="secondary"
-                        key={genre}
-                        size="sm"
-                        variant="flat"
-                      >
-                        {genre}
-                      </Chip>
-                    ))}
-                  </div>
-                  <div className="text-[10px] text-gray-500 mt-2">
-                    {years.length.toLocaleString()} movies
-                  </div>
-                </div>
-              )}
-              <div className="space-y-2">
-                <Tooltip
-                  content="Each dot represents a movie's average rating"
-                  placement="left"
-                >
-                  <div className="flex items-center gap-2 cursor-help">
-                    <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
-                    <span className="text-gray-300">Movie rating</span>
-                  </div>
-                </Tooltip>
-                <Tooltip
-                  content="Polynomial regression showing the overall trend"
-                  placement="left"
-                >
-                  <div className="flex items-center gap-2 cursor-help">
-                    <span
-                      aria-hidden
-                      className="w-6 h-0.5 rounded bg-pink-400"
-                    />
-                    <span className="text-gray-300">Trend line</span>
-                  </div>
-                </Tooltip>
+        {/* Hover Tooltip */}
+        {hoveredPoint && (
+          <Card
+            className="pointer-events-none absolute z-40 bg-black/80 backdrop-blur-md border-white/10 max-w-xs"
+            style={{
+              left: Math.min(hoveredPoint.x, dimensions.width - 200),
+              top: Math.min(hoveredPoint.y, dimensions.height - 120),
+            }}
+          >
+            <CardBody className="p-3">
+              <p className="font-semibold text-sm text-white truncate">
+                {hoveredPoint.title}
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <Chip color="secondary" size="sm" variant="flat">
+                  {hoveredPoint.year}
+                </Chip>
+                <Chip color="warning" size="sm" variant="flat">
+                  ★ {hoveredPoint.avgRating.toFixed(2)}
+                </Chip>
               </div>
-            </div>
-          </CardBody>
-        </Card>
+              <p className="text-[11px] text-gray-400 mt-2">
+                {hoveredPoint.genres.replace(/,/g, " • ")}
+              </p>
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Legend Card with Help */}
+        <div className="absolute top-4 right-4 flex items-start gap-2">
+          <HelpTooltip
+            description="Each dot represents a movie plotted by its release year and average user rating. The trend line shows how ratings have changed over time."
+            interactions={[
+              { icon: "👆", text: "Hover points for movie details" },
+              { icon: "🎭", text: "Select genres in the network to filter" },
+            ]}
+            title="Ratings Over Time"
+          />
+          <Card className="pointer-events-none bg-black/40 backdrop-blur-md border-white/10">
+            <CardBody className="p-4">
+              <div className="flex flex-col gap-3 text-xs">
+                {selectedGenres.length > 0 && (
+                  <div className="pb-3 border-b border-white/10">
+                    <div className="text-[10px] text-gray-400 mb-2">
+                      Filtered by:
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedGenres.map((genre) => (
+                        <Chip
+                          color="secondary"
+                          key={genre}
+                          size="sm"
+                          variant="flat"
+                        >
+                          {genre}
+                        </Chip>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-2">
+                      {years.length.toLocaleString()} movies
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Tooltip
+                    content="Each dot represents a movie's average rating"
+                    placement="left"
+                  >
+                    <div className="flex items-center gap-2 cursor-help">
+                      <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
+                      <span className="text-gray-300">Movie rating</span>
+                    </div>
+                  </Tooltip>
+                  <Tooltip
+                    content="Polynomial regression showing the overall trend"
+                    placement="left"
+                  >
+                    <div className="flex items-center gap-2 cursor-help">
+                      <span
+                        aria-hidden
+                        className="w-6 h-0.5 rounded bg-pink-400"
+                      />
+                      <span className="text-gray-300">Trend line</span>
+                    </div>
+                  </Tooltip>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+
+        {years.length === 0 && selectedGenres.length > 0 && (
+          <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
+            <CardBody className="p-8 text-center">
+              <div className="text-4xl mb-4">🔍</div>
+              <p className="text-sm text-gray-400">
+                No movies found with all selected genres:
+              </p>
+              <div className="flex flex-wrap gap-1 justify-center mt-3">
+                {selectedGenres.map((genre) => (
+                  <Chip color="secondary" key={genre} size="sm" variant="flat">
+                    {genre}
+                  </Chip>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-3">
+                Try selecting fewer genres
+              </p>
+            </CardBody>
+          </Card>
+        )}
+
+        {years.length === 0 && selectedGenres.length === 0 && (
+          <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
+            <CardBody className="p-8 text-center">
+              <div className="text-4xl mb-4">📭</div>
+              <p className="text-sm text-gray-400">
+                No movie data available to visualize
+              </p>
+            </CardBody>
+          </Card>
+        )}
       </div>
 
-      {years.length === 0 && selectedGenres.length > 0 && (
-        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
-          <CardBody className="p-8 text-center">
-            <div className="text-4xl mb-4">🔍</div>
-            <p className="text-sm text-gray-400">
-              No movies found with all selected genres:
-            </p>
-            <div className="flex flex-wrap gap-1 justify-center mt-3">
-              {selectedGenres.map((genre) => (
-                <Chip color="secondary" key={genre} size="sm" variant="flat">
-                  {genre}
-                </Chip>
-              ))}
-            </div>
-            <p className="text-xs text-gray-500 mt-3">
-              Try selecting fewer genres
-            </p>
-          </CardBody>
-        </Card>
-      )}
-
-      {years.length === 0 && selectedGenres.length === 0 && (
-        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
-          <CardBody className="p-8 text-center">
-            <div className="text-4xl mb-4">📭</div>
-            <p className="text-sm text-gray-400">
-              No movie data available to visualize
-            </p>
-          </CardBody>
-        </Card>
-      )}
+      {/* X-Axis Range Slider */}
+      <RangeSlider
+        defaultMax={xFullExtent.max}
+        defaultMin={xFullExtent.min}
+        formatValue={(v) => v.toString()}
+        label="Year"
+        max={xFullExtent.max}
+        min={xFullExtent.min}
+        onRangeChange={handleRangeChange}
+        step={1}
+      />
     </div>
   );
 }

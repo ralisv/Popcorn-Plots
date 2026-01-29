@@ -1,0 +1,133 @@
+import { Button, Slider } from "@heroui/react";
+import { Check, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+
+export interface RangeSliderProps {
+  className?: string;
+  defaultMax: number;
+  defaultMin: number;
+  formatValue?: (value: number) => string;
+  label: string;
+  max: number;
+  min: number;
+  onRangeChange: (min: number, max: number) => void;
+  step?: number;
+}
+
+export function RangeSlider({
+  className,
+  defaultMax,
+  defaultMin,
+  formatValue = (v) => v.toString(),
+  label,
+  max,
+  min,
+  onRangeChange,
+  step = 1,
+}: RangeSliderProps): React.ReactElement {
+  // Temporary state for slider (before confirmation)
+  const [tempRange, setTempRange] = useState<[number, number]>([
+    defaultMin,
+    defaultMax,
+  ]);
+  // Confirmed state
+  const [confirmedRange, setConfirmedRange] = useState<[number, number]>([
+    defaultMin,
+    defaultMax,
+  ]);
+  // Track if there are pending changes
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Update temp range when defaults change (e.g., when data changes)
+  useEffect(() => {
+    setTempRange([defaultMin, defaultMax]);
+    setConfirmedRange([defaultMin, defaultMax]);
+  }, [defaultMin, defaultMax]);
+
+  const handleSliderChange = useCallback((value: number | number[]) => {
+    if (Array.isArray(value) && value.length === 2) {
+      setTempRange([value[0], value[1]]);
+      setHasChanges(true);
+    }
+  }, []);
+
+  const handleConfirm = useCallback(() => {
+    setConfirmedRange(tempRange);
+    onRangeChange(tempRange[0], tempRange[1]);
+    setHasChanges(false);
+  }, [tempRange, onRangeChange]);
+
+  const handleReset = useCallback(() => {
+    setTempRange([defaultMin, defaultMax]);
+    setConfirmedRange([defaultMin, defaultMax]);
+    onRangeChange(defaultMin, defaultMax);
+    setHasChanges(false);
+  }, [defaultMin, defaultMax, onRangeChange]);
+
+  const isDefault =
+    confirmedRange[0] === defaultMin && confirmedRange[1] === defaultMax;
+
+  return (
+    <div
+      className={[
+        "flex items-center gap-3 px-4 py-2 bg-black/30 backdrop-blur-sm rounded-lg border border-white/10",
+        className ?? "",
+      ].join(" ")}
+    >
+      <span className="text-xs text-gray-400 whitespace-nowrap min-w-[80px]">
+        {label}:
+      </span>
+      <div className="flex-grow min-w-[200px] max-w-[400px]">
+        <Slider
+          classNames={{
+            base: "gap-3",
+            filler: "bg-gradient-to-r from-purple-500 to-indigo-500",
+            thumb: "bg-white shadow-md",
+            track: "bg-white/20",
+          }}
+          defaultValue={[defaultMin, defaultMax]}
+          formatOptions={{ maximumFractionDigits: 0 }}
+          maxValue={max}
+          minValue={min}
+          onChange={handleSliderChange}
+          showTooltip
+          size="sm"
+          step={step}
+          value={tempRange}
+        />
+      </div>
+      <div className="flex items-center gap-1 text-xs text-gray-300 min-w-[100px]">
+        <span className="font-mono">{formatValue(tempRange[0])}</span>
+        <span className="text-gray-500">–</span>
+        <span className="font-mono">{formatValue(tempRange[1])}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <Button
+          className={[
+            "min-w-0 h-7 px-2",
+            hasChanges
+              ? "bg-green-600 hover:bg-green-500"
+              : "bg-gray-700 hover:bg-gray-600",
+          ].join(" ")}
+          isDisabled={!hasChanges}
+          onPress={handleConfirm}
+          size="sm"
+          title="Apply filter"
+          variant="flat"
+        >
+          <Check className="w-4 h-4" />
+        </Button>
+        <Button
+          className="min-w-0 h-7 px-2 bg-gray-700 hover:bg-gray-600"
+          isDisabled={isDefault && !hasChanges}
+          onPress={handleReset}
+          size="sm"
+          title="Reset to default"
+          variant="flat"
+        >
+          <RotateCcw className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}

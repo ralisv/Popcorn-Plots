@@ -7,6 +7,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpTooltip } from "../HelpTooltip";
+import { RangeSlider } from "../RangeSlider";
 
 export interface RatingVsTimeSinceReleaseChartProps {
   className?: string;
@@ -55,6 +56,8 @@ export function RatingVsTimeSinceReleaseChart({
   const gRef = useRef<null | SVGGElement>(null);
   const [dimensions, setDimensions] = useState({ height: 0, width: 0 });
   const [hoveredPoint, setHoveredPoint] = useState<HoveredPoint | null>(null);
+  const [xRangeMin, setXRangeMin] = useState<null | number>(null);
+  const [xRangeMax, setXRangeMax] = useState<null | number>(null);
 
   // Pre-compute title data (only depends on titlesDf)
   const titleData = useMemo(() => {
@@ -168,7 +171,7 @@ export function RatingVsTimeSinceReleaseChart({
   }, [ratingsDf, titleData, movieAvgRatings]);
 
   // Calculate aggregated data filtered by selected genres (fast operation)
-  const aggregatedData = useMemo(() => {
+  const allData = useMemo(() => {
     if (!ratingData || !titleData) return [];
 
     const selectedGenreSet =
@@ -223,6 +226,39 @@ export function RatingVsTimeSinceReleaseChart({
     points.sort((a, b) => a.yearsSinceRelease - b.yearsSinceRelease);
     return points;
   }, [ratingData, titleData, selectedGenres]);
+
+  // Calculate the full x extent for slider bounds (based on genre-filtered data)
+  const xFullExtent = useMemo(() => {
+    if (allData.length === 0) return { max: 100, min: 0 };
+    const extent = d3.extent(allData, (d) => d.yearsSinceRelease) as [
+      number,
+      number,
+    ];
+    return { max: extent[1], min: extent[0] };
+  }, [allData]);
+
+  // Initialize x-range to full extent when data changes
+  useEffect(() => {
+    if (allData.length > 0 && xRangeMin === null && xRangeMax === null) {
+      setXRangeMin(xFullExtent.min);
+      setXRangeMax(xFullExtent.max);
+    }
+  }, [allData, xFullExtent, xRangeMin, xRangeMax]);
+
+  // Filter data by x-axis range
+  const aggregatedData = useMemo(() => {
+    if (xRangeMin === null || xRangeMax === null) return allData;
+    return allData.filter(
+      (d) =>
+        d.yearsSinceRelease >= xRangeMin && d.yearsSinceRelease <= xRangeMax,
+    );
+  }, [allData, xRangeMin, xRangeMax]);
+
+  // Handle range slider change
+  const handleRangeChange = useCallback((min: number, max: number) => {
+    setXRangeMin(min);
+    setXRangeMax(max);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -520,165 +556,184 @@ export function RatingVsTimeSinceReleaseChart({
   return (
     <div
       className={[
-        "relative",
+        "flex",
+        "flex-col",
         "w-full",
         "h-full",
         "overflow-hidden",
         className ?? "",
       ].join(" ")}
-      ref={containerRef}
     >
-      <svg
-        aria-label="Rating vs Time Since Release Scatter Plot"
-        className="w-full h-full"
-        ref={svgRef}
-        role="img"
-        viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
-      >
-        <g ref={gRef} />
-      </svg>
-
-      {/* Hover Tooltip */}
-      {hoveredPoint && (
-        <Card
-          className="pointer-events-none absolute z-40 bg-black/80 backdrop-blur-md border-white/10 max-w-xs"
-          style={{
-            left: Math.min(hoveredPoint.x, dimensions.width - 200),
-            top: Math.min(hoveredPoint.y, dimensions.height - 120),
-          }}
+      {/* Chart container */}
+      <div className="flex-grow relative" ref={containerRef}>
+        <svg
+          aria-label="Rating vs Time Since Release Scatter Plot"
+          className="w-full h-full"
+          ref={svgRef}
+          role="img"
+          viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
         >
-          <CardBody className="p-3">
-            <p className="font-semibold text-sm text-white">
-              {hoveredPoint.yearsSinceRelease === 0
-                ? "Release Year"
-                : hoveredPoint.yearsSinceRelease === 1
-                  ? "1 year after release"
-                  : `${hoveredPoint.yearsSinceRelease} years after release`}
-            </p>
-            <div className="flex items-center gap-2 mt-2">
-              <Chip
-                color={hoveredPoint.avgRatingDelta >= 0 ? "success" : "danger"}
-                size="sm"
-                variant="flat"
-              >
-                {hoveredPoint.avgRatingDelta >= 0 ? "+" : ""}
-                {hoveredPoint.avgRatingDelta.toFixed(3)}
-              </Chip>
-              <Chip color="default" size="sm" variant="flat">
-                {hoveredPoint.count.toLocaleString()} ratings
-              </Chip>
-            </div>
-          </CardBody>
-        </Card>
-      )}
+          <g ref={gRef} />
+        </svg>
 
-      {/* Legend Card with Help */}
-      <div className="absolute top-4 right-4 flex items-start gap-2">
-        <HelpTooltip
-          description="Each dot represents the normalized average rating (rating minus movie's overall average) at a specific number of years after release. Values above 0 mean higher than average ratings. This shows how perception changes over time."
-          interactions={[
-            { icon: "👆", text: "Hover points for details" },
-            { icon: "🎭", text: "Select genres in the network to filter" },
-            { icon: "⚪", text: "Dot size = number of ratings" },
-          ]}
-          title="Normalized Rating vs Time Since Release"
-        />
-        <Card className="pointer-events-none bg-black/40 backdrop-blur-md border-white/10">
-          <CardBody className="p-4">
-            <div className="flex flex-col gap-3 text-xs">
-              {selectedGenres.length > 0 && (
-                <div className="pb-3 border-b border-white/10">
-                  <div className="text-[10px] text-gray-400 mb-2">
-                    Filtered by:
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {selectedGenres.map((genre) => (
-                      <Chip
-                        color="secondary"
-                        key={genre}
-                        size="sm"
-                        variant="flat"
-                      >
-                        {genre}
-                      </Chip>
-                    ))}
-                  </div>
-                  <div className="text-[10px] text-gray-500 mt-2">
-                    {totalRatings.toLocaleString()} ratings
-                  </div>
-                </div>
-              )}
-              <div className="space-y-2">
-                <Tooltip
-                  content="Normalized rating (vs movie avg) at years after release"
-                  placement="left"
+        {/* Hover Tooltip */}
+        {hoveredPoint && (
+          <Card
+            className="pointer-events-none absolute z-40 bg-black/80 backdrop-blur-md border-white/10 max-w-xs"
+            style={{
+              left: Math.min(hoveredPoint.x, dimensions.width - 200),
+              top: Math.min(hoveredPoint.y, dimensions.height - 120),
+            }}
+          >
+            <CardBody className="p-3">
+              <p className="font-semibold text-sm text-white">
+                {hoveredPoint.yearsSinceRelease === 0
+                  ? "Release Year"
+                  : hoveredPoint.yearsSinceRelease === 1
+                    ? "1 year after release"
+                    : `${hoveredPoint.yearsSinceRelease} years after release`}
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <Chip
+                  color={
+                    hoveredPoint.avgRatingDelta >= 0 ? "success" : "danger"
+                  }
+                  size="sm"
+                  variant="flat"
                 >
-                  <div className="flex items-center gap-2 cursor-help">
-                    <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-cyan-500 to-teal-500" />
-                    <span className="text-gray-300">Rating delta by time</span>
-                  </div>
-                </Tooltip>
-                <Tooltip
-                  content="Polynomial regression showing the overall trend"
-                  placement="left"
-                >
-                  <div className="flex items-center gap-2 cursor-help">
-                    <span
-                      aria-hidden
-                      className="w-6 h-0.5 rounded bg-cyan-400"
-                    />
-                    <span className="text-gray-300">Trend line</span>
-                  </div>
-                </Tooltip>
-                <Tooltip
-                  content="Zero line - ratings at this level match movie average"
-                  placement="left"
-                >
-                  <div className="flex items-center gap-2 cursor-help">
-                    <span
-                      aria-hidden
-                      className="w-6 h-0.5 rounded border-b border-dashed border-white/30"
-                    />
-                    <span className="text-gray-300">Movie average</span>
-                  </div>
-                </Tooltip>
+                  {hoveredPoint.avgRatingDelta >= 0 ? "+" : ""}
+                  {hoveredPoint.avgRatingDelta.toFixed(3)}
+                </Chip>
+                <Chip color="default" size="sm" variant="flat">
+                  {hoveredPoint.count.toLocaleString()} ratings
+                </Chip>
               </div>
-            </div>
-          </CardBody>
-        </Card>
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Legend Card with Help */}
+        <div className="absolute top-4 right-4 flex items-start gap-2">
+          <HelpTooltip
+            description="Each dot represents the normalized average rating (rating minus movie's overall average) at a specific number of years after release. Values above 0 mean higher than average ratings. This shows how perception changes over time."
+            interactions={[
+              { icon: "👆", text: "Hover points for details" },
+              { icon: "🎭", text: "Select genres in the network to filter" },
+              { icon: "⚪", text: "Dot size = number of ratings" },
+            ]}
+            title="Normalized Rating vs Time Since Release"
+          />
+          <Card className="pointer-events-none bg-black/40 backdrop-blur-md border-white/10">
+            <CardBody className="p-4">
+              <div className="flex flex-col gap-3 text-xs">
+                {selectedGenres.length > 0 && (
+                  <div className="pb-3 border-b border-white/10">
+                    <div className="text-[10px] text-gray-400 mb-2">
+                      Filtered by:
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedGenres.map((genre) => (
+                        <Chip
+                          color="secondary"
+                          key={genre}
+                          size="sm"
+                          variant="flat"
+                        >
+                          {genre}
+                        </Chip>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-2">
+                      {totalRatings.toLocaleString()} ratings
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Tooltip
+                    content="Normalized rating (vs movie avg) at years after release"
+                    placement="left"
+                  >
+                    <div className="flex items-center gap-2 cursor-help">
+                      <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-cyan-500 to-teal-500" />
+                      <span className="text-gray-300">
+                        Rating delta by time
+                      </span>
+                    </div>
+                  </Tooltip>
+                  <Tooltip
+                    content="Polynomial regression showing the overall trend"
+                    placement="left"
+                  >
+                    <div className="flex items-center gap-2 cursor-help">
+                      <span
+                        aria-hidden
+                        className="w-6 h-0.5 rounded bg-cyan-400"
+                      />
+                      <span className="text-gray-300">Trend line</span>
+                    </div>
+                  </Tooltip>
+                  <Tooltip
+                    content="Zero line - ratings at this level match movie average"
+                    placement="left"
+                  >
+                    <div className="flex items-center gap-2 cursor-help">
+                      <span
+                        aria-hidden
+                        className="w-6 h-0.5 rounded border-b border-dashed border-white/30"
+                      />
+                      <span className="text-gray-300">Movie average</span>
+                    </div>
+                  </Tooltip>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+
+        {aggregatedData.length === 0 && selectedGenres.length > 0 && (
+          <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
+            <CardBody className="p-8 text-center">
+              <div className="text-4xl mb-4">🔍</div>
+              <p className="text-sm text-gray-400">
+                No rating data found for selected genres:
+              </p>
+              <div className="flex flex-wrap gap-1 justify-center mt-3">
+                {selectedGenres.map((genre) => (
+                  <Chip color="secondary" key={genre} size="sm" variant="flat">
+                    {genre}
+                  </Chip>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-3">
+                Try selecting fewer genres
+              </p>
+            </CardBody>
+          </Card>
+        )}
+
+        {aggregatedData.length === 0 && selectedGenres.length === 0 && (
+          <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
+            <CardBody className="p-8 text-center">
+              <div className="text-4xl mb-4">📭</div>
+              <p className="text-sm text-gray-400">
+                No rating data available to visualize
+              </p>
+            </CardBody>
+          </Card>
+        )}
       </div>
 
-      {aggregatedData.length === 0 && selectedGenres.length > 0 && (
-        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
-          <CardBody className="p-8 text-center">
-            <div className="text-4xl mb-4">🔍</div>
-            <p className="text-sm text-gray-400">
-              No rating data found for selected genres:
-            </p>
-            <div className="flex flex-wrap gap-1 justify-center mt-3">
-              {selectedGenres.map((genre) => (
-                <Chip color="secondary" key={genre} size="sm" variant="flat">
-                  {genre}
-                </Chip>
-              ))}
-            </div>
-            <p className="text-xs text-gray-500 mt-3">
-              Try selecting fewer genres
-            </p>
-          </CardBody>
-        </Card>
-      )}
-
-      {aggregatedData.length === 0 && selectedGenres.length === 0 && (
-        <Card className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/40 backdrop-blur-md border-white/10">
-          <CardBody className="p-8 text-center">
-            <div className="text-4xl mb-4">📭</div>
-            <p className="text-sm text-gray-400">
-              No rating data available to visualize
-            </p>
-          </CardBody>
-        </Card>
-      )}
+      {/* X-Axis Range Slider */}
+      <RangeSlider
+        defaultMax={xFullExtent.max}
+        defaultMin={xFullExtent.min}
+        formatValue={(v) => `${v}y`}
+        label="Years Since Release"
+        max={xFullExtent.max}
+        min={xFullExtent.min}
+        onRangeChange={handleRangeChange}
+        step={1}
+      />
     </div>
   );
 }
