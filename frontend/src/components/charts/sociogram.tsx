@@ -21,7 +21,7 @@ const NODE_COLLISION_PADDING = 10;
 const NODE_SIZE_RANGE: [number, number] = [12, 40];
 
 /** The minimum and maximum zoom level. */
-const ZOOM_EXTENT: [number, number] = [0.1, 8];
+const ZOOM_EXTENT: [number, number] = [0.5, 8];
 
 /** The duration of the hover transition in milliseconds. */
 const HOVER_TRANSITION_DURATION = 300;
@@ -38,7 +38,7 @@ const SYMMETRIC_LINK_STRENGTH = 1;
 /**
  * Controls how strongly nodes push each other apart.
  */
-const CHARGE_STRENGTH = -2000;
+const CHARGE_STRENGTH = -1500;
 
 /** Maximum distance (in pixels) for charge force to apply. */
 const CHARGE_MAX_DISTANCE = 1000;
