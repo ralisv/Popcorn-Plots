@@ -4,6 +4,7 @@ import { ChevronUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import packageJson from "../package.json";
 import { RatingOverTimeChart } from "./components/charts/ratingOverTimeChart";
+import { RatingVsTimeSinceReleaseChart } from "./components/charts/ratingVsTimeSinceReleaseChart";
 import { Sociogram } from "./components/charts/sociogram";
 import { GenreKPIPanel } from "./components/GenreKPIPanel";
 import { RatingKPIPanel } from "./components/KPIPanel";
@@ -141,6 +142,27 @@ export function App({
               </div>
               <div className="w-72 flex-shrink-0 hidden lg:block">
                 <RatingKPIPanel df={df} selectedGenres={selectedGenres} />
+              </div>
+            </div>
+          </section>
+
+          {/* Rating vs Time Since Release Section */}
+          <section>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-px flex-grow bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+              <h2 className="text-xl font-semibold text-white/90 flex items-center gap-2">
+                <span className="text-2xl">⏱️</span>
+                Rating vs Time Since Release
+              </h2>
+              <div className="h-px flex-grow bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+            </div>
+            <div className="flex gap-6 items-stretch">
+              <div className="flex-grow min-h-[400px] rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl shadow-cyan-500/5 overflow-hidden">
+                <RatingVsTimeSinceReleaseChart
+                  ratingsDf={ratingsDf}
+                  selectedGenres={selectedGenres}
+                  titlesDf={titlesDf}
+                />
               </div>
             </div>
           </section>
