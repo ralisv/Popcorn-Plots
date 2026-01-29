@@ -154,7 +154,7 @@ export function RatingVsTimeSinceReleaseChart({
       const rating = ratingValues[i] / 10; // Convert to 0-10 scale
       const ratingDelta = rating - movieAvg;
 
-      if (yearsSinceRelease >= 0) {
+      if (yearsSinceRelease >= 0 && yearsSinceRelease < 100) {
         result.push({
           imdbId: ratingImdbIds[i],
           monthsSinceRelease,
@@ -796,7 +796,7 @@ export function TimeSinceReleaseKPIPanel({
       }
 
       const yearsSinceRelease = ratingYear - titleInfo.year;
-      if (yearsSinceRelease < 0) continue;
+      if (yearsSinceRelease < 0 || yearsSinceRelease >= 100) continue;
 
       totalCount += 1;
 
