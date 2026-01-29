@@ -2,7 +2,7 @@ import type { DataFrame } from "danfojs";
 
 import { Card, CardBody, Chip, Tooltip } from "@heroui/react";
 import * as d3 from "d3";
-import { regressionPoly } from "d3-regression";
+import { regressionLoess } from "d3-regression";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -409,7 +409,7 @@ export function RatingVsTimeSinceReleaseChart({
     // For normalized data, center around 0
     const yScale = d3
       .scaleLinear()
-      .domain([Math.min(-0.5, yMin - 0.1), Math.max(0.5, yMax + 0.1)])
+      .domain([Math.min(-0.2, yMin - 0.1), Math.max(0.2, yMax + 0.1)])
       .range([innerHeight, 0])
       .nice();
 
@@ -553,7 +553,7 @@ export function RatingVsTimeSinceReleaseChart({
       monthsSinceRelease: d.monthsSinceRelease,
     }));
 
-    const regression = regressionPoly()
+    const regression = regressionLoess()
       .x(
         (d: { avgRatingDelta: number; monthsSinceRelease: number }) =>
           d.monthsSinceRelease,
@@ -562,7 +562,7 @@ export function RatingVsTimeSinceReleaseChart({
         (d: { avgRatingDelta: number; monthsSinceRelease: number }) =>
           d.avgRatingDelta,
       )
-      .order(3);
+      .bandwidth(0.25);
 
     const regressionResult = regression(regressionData);
 
