@@ -23,7 +23,6 @@ interface GenreNodeDatum {
 
 export function GenreKPIPanel({
   className,
-  links = [],
   nodes = [],
   selectedGenres: _selectedGenres = [],
 }: GenreKPIPanelProps): React.ReactElement {
