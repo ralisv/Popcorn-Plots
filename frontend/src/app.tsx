@@ -184,15 +184,15 @@ export function App({
           {/* Rating vs Runtime Section */}
           <section>
             <div className="flex items-center gap-3 mb-4">
-              <div className="h-px flex-grow bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
+              <div className="h-px flex-grow bg-gradient-to-r from-transparent via-pink-500/50 to-transparent" />
               <h2 className="text-xl font-semibold text-white/90 flex items-center gap-2">
                 <span className="text-2xl">🎬</span>
                 Rating vs Runtime
               </h2>
-              <div className="h-px flex-grow bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
+              <div className="h-px flex-grow bg-gradient-to-r from-transparent via-pink-500/50 to-transparent" />
             </div>
             <div className="flex gap-6 items-stretch">
-              <div className="flex-grow min-h-[550px] rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl shadow-emerald-500/5 overflow-hidden">
+              <div className="flex-grow min-h-[550px] rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-2xl shadow-pink-500/5 overflow-hidden">
                 <RatingVsRuntimeChart df={df} selectedGenres={selectedGenres} />
               </div>
               <div className="w-72 flex-shrink-0 hidden lg:block">

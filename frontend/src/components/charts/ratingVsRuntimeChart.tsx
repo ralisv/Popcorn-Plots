@@ -739,14 +739,20 @@ export function RuntimeKPIPanel({
   df,
   selectedGenres = [],
 }: RuntimeKPIPanelProps): React.ReactElement {
-  const stats = useMemo((): RuntimeStats => {
+  const stats = useMemo(() => {
     if (!df) {
       return {
         avgRatingLong: 0,
         avgRatingMedium: 0,
         avgRatingShort: 0,
         avgRuntime: 0,
+        bestCategory: "—",
+        coefficientOfVariation: 0,
+        correlation: "neutral" as const,
         longestRuntime: 0,
+        medianRuntime: 0,
+        runtimeRange: 0,
+        runtimeStdDev: 0,
         shortestRuntime: 0,
         totalMovies: 0,
       };
@@ -769,6 +775,10 @@ export function RuntimeKPIPanel({
     let longCount = 0,
       longSum = 0;
 
+    // Collect all valid runtimes for median and std dev calculation
+    const validRuntimes: number[] = [];
+    const validRatings: number[] = [];
+
     for (let i = 0; i < allGenres.length; i++) {
       const runtime = allRuntimes[i];
       if (!runtime || runtime <= 0 || runtime > 600) continue;
@@ -783,6 +793,8 @@ export function RuntimeKPIPanel({
       totalMovies += 1;
       shortestRuntime = Math.min(shortestRuntime, runtime);
       longestRuntime = Math.max(longestRuntime, runtime);
+      validRuntimes.push(runtime);
+      validRatings.push(allRatings[i]);
 
       const rating = allRatings[i];
       if (runtime < 90) {
@@ -797,12 +809,70 @@ export function RuntimeKPIPanel({
       }
     }
 
+    // Calculate median runtime
+    const sortedRuntimes = [...validRuntimes].sort((a, b) => a - b);
+    const medianRuntime =
+      sortedRuntimes.length > 0
+        ? sortedRuntimes.length % 2 === 1
+          ? sortedRuntimes[Math.floor(sortedRuntimes.length / 2)]
+          : (sortedRuntimes[sortedRuntimes.length / 2 - 1] +
+              sortedRuntimes[sortedRuntimes.length / 2]) /
+            2
+        : 0;
+
+    // Calculate standard deviation
+    const avgRuntime = totalMovies > 0 ? totalRuntime / totalMovies : 0;
+    const variance =
+      validRuntimes.length > 0
+        ? validRuntimes.reduce(
+            (sum, r) => sum + Math.pow(r - avgRuntime, 2),
+            0,
+          ) / validRuntimes.length
+        : 0;
+    const runtimeStdDev = Math.sqrt(variance);
+
+    // Calculate coefficient of variation (normalized measure of dispersion)
+    const coefficientOfVariation =
+      avgRuntime > 0 ? (runtimeStdDev / avgRuntime) * 100 : 0;
+
+    // Calculate average ratings for each category
+    const avgRatingShort = shortCount > 0 ? shortSum / shortCount : 0;
+    const avgRatingMedium = mediumCount > 0 ? mediumSum / mediumCount : 0;
+    const avgRatingLong = longCount > 0 ? longSum / longCount : 0;
+
+    // Determine best category
+    const categories = [
+      { count: shortCount, name: "Short (<90m)", rating: avgRatingShort },
+      { count: mediumCount, name: "Medium (90-150m)", rating: avgRatingMedium },
+      { count: longCount, name: "Long (>150m)", rating: avgRatingLong },
+    ].filter((c) => c.count > 0);
+
+    const bestCategory =
+      categories.length > 0
+        ? categories.reduce((best, c) => (c.rating > best.rating ? c : best))
+            .name
+        : "—";
+
+    // Determine correlation direction (comparing short vs long)
+    let correlation: "negative" | "neutral" | "positive" = "neutral";
+    if (shortCount > 0 && longCount > 0) {
+      const diff = avgRatingLong - avgRatingShort;
+      if (diff > 0.1) correlation = "positive";
+      else if (diff < -0.1) correlation = "negative";
+    }
+
     return {
-      avgRatingLong: longCount > 0 ? longSum / longCount : 0,
-      avgRatingMedium: mediumCount > 0 ? mediumSum / mediumCount : 0,
-      avgRatingShort: shortCount > 0 ? shortSum / shortCount : 0,
-      avgRuntime: totalMovies > 0 ? totalRuntime / totalMovies : 0,
+      avgRatingLong,
+      avgRatingMedium,
+      avgRatingShort,
+      avgRuntime,
+      bestCategory,
+      coefficientOfVariation,
+      correlation,
       longestRuntime: longestRuntime === 0 ? 0 : longestRuntime,
+      medianRuntime,
+      runtimeRange: longestRuntime === 0 ? 0 : longestRuntime - shortestRuntime,
+      runtimeStdDev,
       shortestRuntime: shortestRuntime === Infinity ? 0 : shortestRuntime,
       totalMovies,
     };
@@ -816,87 +886,169 @@ export function RuntimeKPIPanel({
     return `${hours}h ${mins}m`;
   };
 
+  const getCorrelationInfo = (): {
+    color: string;
+    icon: string;
+    text: string;
+  } => {
+    if (stats.correlation === "positive") {
+      return {
+        color: "text-green-400",
+        icon: "📈",
+        text: "Longer movies tend to have higher ratings",
+      };
+    } else if (stats.correlation === "negative") {
+      return {
+        color: "text-red-400",
+        icon: "📉",
+        text: "Shorter movies tend to have higher ratings",
+      };
+    }
+    return {
+      color: "text-gray-400",
+      icon: "➡️",
+      text: "Runtime has minimal impact on ratings",
+    };
+  };
+
+  const correlationInfo = getCorrelationInfo();
+
   return (
-    <div className={["flex flex-col gap-4", className ?? ""].join(" ")}>
-      {/* Runtime Overview */}
-      <Card className="bg-black/40 backdrop-blur-md border-white/10">
-        <CardBody className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">⏱️</span>
-            <span className="text-sm font-medium text-white/90">
-              Runtime Overview
-            </span>
-          </div>
-          <div className="space-y-3">
-            <div className="text-center py-2">
-              <div className="text-xs text-gray-400 mb-1">Average Runtime</div>
-              <span className="text-2xl font-bold text-pink-400 font-mono">
+    <Card
+      className={[
+        "bg-black/40 backdrop-blur-md border-white/10",
+        className ?? "",
+      ].join(" ")}
+    >
+      <CardBody className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-lg">⏱️</span>
+          <span className="text-sm font-medium text-white/90">
+            Runtime Statistics
+          </span>
+          <Chip
+            className="ml-auto bg-pink-500/20 text-pink-300"
+            size="sm"
+            variant="flat"
+          >
+            {stats.totalMovies.toLocaleString()} movies
+          </Chip>
+        </div>
+
+        <div className="space-y-4">
+          {/* Central Statistics */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white/5 rounded-lg p-3 text-center">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">
+                Mean
+              </div>
+              <div className="text-xl font-bold text-pink-400 font-mono">
                 {formatRuntime(stats.avgRuntime)}
-              </span>
-            </div>
-            <div className="border-t border-white/10 pt-3 grid grid-cols-2 gap-2">
-              <div className="text-center">
-                <div className="text-[10px] text-gray-400">Shortest</div>
-                <div className="text-sm font-mono text-gray-300">
-                  {formatRuntime(stats.shortestRuntime)}
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-[10px] text-gray-400">Longest</div>
-                <div className="text-sm font-mono text-gray-300">
-                  {formatRuntime(stats.longestRuntime)}
-                </div>
               </div>
             </div>
-            <div className="border-t border-white/10 pt-3">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-gray-400">Total movies</span>
+            <div className="bg-white/5 rounded-lg p-3 text-center">
+              <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">
+                Median
+              </div>
+              <div className="text-xl font-bold text-pink-300 font-mono">
+                {formatRuntime(stats.medianRuntime)}
+              </div>
+            </div>
+          </div>
+
+          {/* Dispersion Metrics */}
+          <div className="border-t border-white/10 pt-3">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              Dispersion
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-[10px] text-gray-400">Std Dev</div>
+                <div className="text-sm font-mono text-gray-300">
+                  ±{stats.runtimeStdDev.toFixed(0)}m
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-gray-400">Range</div>
+                <div className="text-sm font-mono text-gray-300">
+                  {stats.runtimeRange}m
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-gray-400">CV</div>
+                <div className="text-sm font-mono text-gray-300">
+                  {stats.coefficientOfVariation.toFixed(1)}%
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Min/Max */}
+          <div className="border-t border-white/10 pt-3">
+            <div className="flex justify-between text-xs">
+              <div className="text-center flex-1">
+                <span className="text-gray-400">Shortest: </span>
                 <span className="text-gray-300 font-mono">
-                  {stats.totalMovies.toLocaleString()}
+                  {formatRuntime(stats.shortestRuntime)}
+                </span>
+              </div>
+              <div className="text-white/20">|</div>
+              <div className="text-center flex-1">
+                <span className="text-gray-400">Longest: </span>
+                <span className="text-gray-300 font-mono">
+                  {formatRuntime(stats.longestRuntime)}
                 </span>
               </div>
             </div>
           </div>
-        </CardBody>
-      </Card>
 
-      {/* Rating by Length Category */}
-      <Card className="bg-black/40 backdrop-blur-md border-white/10">
-        <CardBody className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">📊</span>
-            <span className="text-sm font-medium text-white/90">
-              Rating by Length
-            </span>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+          {/* Rating by Category */}
+          <div className="border-t border-white/10 pt-3">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              Avg Rating by Length
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-400">Short (&lt;90m)</span>
+                <Chip color="warning" size="sm" variant="flat">
+                  ★ {stats.avgRatingShort.toFixed(2)}
+                </Chip>
               </div>
-              <Chip color="warning" size="sm" variant="flat">
-                ★ {stats.avgRatingShort.toFixed(2)}
-              </Chip>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-400">Medium (90-150m)</span>
+                <Chip color="warning" size="sm" variant="flat">
+                  ★ {stats.avgRatingMedium.toFixed(2)}
+                </Chip>
               </div>
-              <Chip color="warning" size="sm" variant="flat">
-                ★ {stats.avgRatingMedium.toFixed(2)}
-              </Chip>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-400">Long (&gt;150m)</span>
+                <Chip color="warning" size="sm" variant="flat">
+                  ★ {stats.avgRatingLong.toFixed(2)}
+                </Chip>
               </div>
-              <Chip color="warning" size="sm" variant="flat">
-                ★ {stats.avgRatingLong.toFixed(2)}
-              </Chip>
             </div>
           </div>
-        </CardBody>
-      </Card>
-    </div>
+
+          {/* Insight */}
+          <div className="border-t border-white/10 pt-3">
+            <div className="bg-white/5 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <span className="text-base">{correlationInfo.icon}</span>
+                <div>
+                  <div
+                    className={`text-xs font-medium ${correlationInfo.color}`}
+                  >
+                    {correlationInfo.text}
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-1">
+                    Best rated: {stats.bestCategory}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </CardBody>
+    </Card>
   );
 }

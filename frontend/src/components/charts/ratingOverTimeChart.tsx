@@ -718,7 +718,7 @@ export function RatingOverTimeChart({
         defaultMax={xFullExtent.max}
         defaultMin={xFullExtent.min}
         formatValue={(v) => v.toString()}
-        label="Year"
+        label="Years"
         max={xFullExtent.max}
         min={xFullExtent.min}
         onRangeChange={handleRangeChange}

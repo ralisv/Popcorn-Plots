@@ -817,7 +817,7 @@ export function RatingVsTimeSinceReleaseChart({
         defaultMax={2}
         defaultMin={0}
         formatValue={(v) => `${v}y`}
-        label="Years Since Release"
+        label="Years"
         max={xFullExtent.max}
         min={xFullExtent.min}
         onRangeChange={handleRangeChange}
@@ -882,13 +882,21 @@ export function TimeSinceReleaseKPIPanel({
   }, [ratingsDf]);
 
   // Calculate stats for the KPI panel
-  const stats = useMemo((): TimeSinceReleaseStats => {
+  const stats = useMemo(() => {
     if (!ratingsDf || !titleData || !movieAvgRatings) {
       return {
         avgDeltaFirstImpression: 0,
+        avgDeltaLate: 0,
+        avgMonthsSince: 0,
         firstImpressionCount: 0,
+        lateCount: 0,
+        medianMonthsSince: 0,
+        peakMonth: 0,
         totalCount: 0,
-        trend: "neutral",
+        trend: "neutral" as const,
+        uniqueMovies: 0,
+        volatilityEarly: 0,
+        volatilityLate: 0,
       };
     }
 
@@ -901,7 +909,16 @@ export function TimeSinceReleaseKPIPanel({
 
     let firstImpressionSum = 0;
     let firstImpressionCount = 0;
+    let lateSum = 0;
+    let lateCount = 0;
     let totalCount = 0;
+    let totalMonthsSince = 0;
+
+    const monthsSinceArray: number[] = [];
+    const earlyDeltas: number[] = [];
+    const lateDeltas: number[] = [];
+    const moviesSeen = new Set<number>();
+    const monthCounts = new Map<number, number>();
 
     for (let i = 0; i < ratingImdbIds.length; i++) {
       const imdbId = ratingImdbIds[i];
@@ -943,8 +960,18 @@ export function TimeSinceReleaseKPIPanel({
       if (yearsSinceRelease < 0 || yearsSinceRelease >= 100) continue;
 
       totalCount += 1;
+      moviesSeen.add(imdbId);
 
       const monthsSinceRelease = yearsSinceRelease * 12 + ratingMonth;
+      totalMonthsSince += monthsSinceRelease;
+      monthsSinceArray.push(monthsSinceRelease);
+
+      // Track which month has most ratings
+      monthCounts.set(
+        monthsSinceRelease,
+        (monthCounts.get(monthsSinceRelease) ?? 0) + 1,
+      );
+
       const rating = ratingValues[i] / 10;
       const ratingDelta = rating - movieAvg;
 
@@ -952,18 +979,67 @@ export function TimeSinceReleaseKPIPanel({
       if (monthsSinceRelease <= 2) {
         firstImpressionSum += ratingDelta;
         firstImpressionCount += 1;
+        earlyDeltas.push(ratingDelta);
+      } else if (monthsSinceRelease > 24) {
+        // Late ratings (after 2 years)
+        lateSum += ratingDelta;
+        lateCount += 1;
+        lateDeltas.push(ratingDelta);
+      }
+    }
+    const avgDeltaFirstImpression =
+      firstImpressionCount > 0 ? firstImpressionSum / firstImpressionCount : 0;
+    const avgDeltaLate = lateCount > 0 ? lateSum / lateCount : 0;
+
+    // Calculate median months since release
+    const sortedMonths = [...monthsSinceArray].sort((a, b) => a - b);
+    const medianMonthsSince =
+      sortedMonths.length > 0
+        ? sortedMonths.length % 2 === 1
+          ? sortedMonths[Math.floor(sortedMonths.length / 2)]
+          : (sortedMonths[sortedMonths.length / 2 - 1] +
+              sortedMonths[sortedMonths.length / 2]) /
+            2
+        : 0;
+
+    // Find peak month (most ratings)
+    let peakMonth = 0;
+    let peakCount = 0;
+    for (const [month, count] of monthCounts.entries()) {
+      if (count > peakCount) {
+        peakMonth = month;
+        peakCount = count;
       }
     }
 
-    const avgDeltaFirstImpression =
-      firstImpressionCount > 0 ? firstImpressionSum / firstImpressionCount : 0;
+    // Calculate volatility (standard deviation of rating deltas)
+    const calcStdDev = (arr: number[]): number => {
+      if (arr.length === 0) return 0;
+      const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const variance =
+        arr.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / arr.length;
+      return Math.sqrt(variance);
+    };
 
     let trend: "down" | "neutral" | "up" = "neutral";
     if (Math.abs(avgDeltaFirstImpression) > 0.02) {
       trend = avgDeltaFirstImpression > 0 ? "up" : "down";
     }
 
-    return { avgDeltaFirstImpression, firstImpressionCount, totalCount, trend };
+    return {
+      avgDeltaFirstImpression,
+      avgDeltaLate,
+      avgMonthsSince: totalCount > 0 ? totalMonthsSince / totalCount : 0,
+      firstImpressionCount,
+      lateCount,
+      medianMonthsSince,
+      peakMonth,
+      totalCount,
+      trend,
+      uniqueMovies: moviesSeen.size,
+      volatilityEarly: calcStdDev(earlyDeltas),
+      volatilityLate: calcStdDev(lateDeltas),
+    };
   }, [ratingsDf, titleData, movieAvgRatings, selectedGenres]);
 
   const formatDelta = (value: number): string => {
@@ -971,93 +1047,159 @@ export function TimeSinceReleaseKPIPanel({
     return `${sign}${value.toFixed(3)}`;
   };
 
+  const formatMonths = (months: number): string => {
+    if (months < 12) return `${Math.round(months)}mo`;
+    const years = months / 12;
+    return `${years.toFixed(1)}yr`;
+  };
+
   return (
-    <div className={["flex flex-col gap-4", className ?? ""].join(" ")}>
-      {/* First Impression vs Global Average */}
-      <Card className="bg-black/40 backdrop-blur-md border-white/10">
-        <CardBody className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            {stats.trend === "up" ? (
-              <TrendingUp className="w-5 h-5 text-green-400" />
-            ) : stats.trend === "down" ? (
-              <TrendingDown className="w-5 h-5 text-red-400" />
-            ) : (
-              <div className="w-5 h-5 flex items-center justify-center text-gray-400">
-                —
-              </div>
-            )}
-            <span className="text-sm font-medium text-white/90">
-              First Impression Effect
-            </span>
-          </div>
-          <div className="space-y-4">
-            <div className="text-center py-3">
-              <div className="text-xs text-gray-400 mb-2">
-                First 2 months vs all-time average
-              </div>
+    <Card
+      className={[
+        "bg-black/40 backdrop-blur-md border-white/10",
+        className ?? "",
+      ].join(" ")}
+    >
+      <CardBody className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-lg">📅</span>
+          <span className="text-sm font-medium text-white/90">
+            Time Since Release Stats
+          </span>
+          <Chip
+            className="ml-auto bg-cyan-500/20 text-cyan-300"
+            size="sm"
+            variant="flat"
+          >
+            {stats.totalCount.toLocaleString()} ratings
+          </Chip>
+        </div>
+
+        <div className="space-y-4">
+          {/* First Impression Effect */}
+          <div className="bg-white/5 rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-2">
+              {stats.trend === "up" ? (
+                <TrendingUp className="w-4 h-4 text-green-400" />
+              ) : stats.trend === "down" ? (
+                <TrendingDown className="w-4 h-4 text-red-400" />
+              ) : (
+                <span className="text-gray-400">—</span>
+              )}
+              <span className="text-xs text-gray-400">
+                First Impression Effect
+              </span>
+            </div>
+            <div className="text-center">
               <span
-                className={`text-3xl font-bold font-mono ${stats.avgDeltaFirstImpression >= 0 ? "text-green-400" : "text-red-400"}`}
+                className={`text-2xl font-bold font-mono ${stats.avgDeltaFirstImpression >= 0 ? "text-green-400" : "text-red-400"}`}
               >
                 {formatDelta(stats.avgDeltaFirstImpression)}
               </span>
-            </div>
-            <div className="border-t border-white/10 pt-3">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-gray-400">First impression ratings</span>
-                <span className="text-cyan-400 font-mono">
-                  {stats.firstImpressionCount.toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-xs mt-2">
-                <span className="text-gray-400">Total ratings</span>
-                <span className="text-gray-300 font-mono">
-                  {stats.totalCount.toLocaleString()}
-                </span>
+              <div className="text-[10px] text-gray-500 mt-1">
+                vs movie&apos;s overall average (first 2 months)
               </div>
             </div>
           </div>
-        </CardBody>
-      </Card>
 
-      {/* Interpretation Card */}
-      <Card className="bg-black/40 backdrop-blur-md border-white/10">
-        <CardBody className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">💡</span>
-            <span className="text-sm font-medium text-white/90">
-              Interpretation
-            </span>
+          {/* Volatility Comparison */}
+          <div className="border-t border-white/10 pt-3">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              Rating Volatility (Std Dev)
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-center">
+              <div>
+                <div className="text-[10px] text-gray-400">Early</div>
+                <div className="text-sm font-mono text-cyan-400">
+                  ±{stats.volatilityEarly.toFixed(3)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-gray-400">Late</div>
+                <div className="text-sm font-mono text-cyan-300">
+                  ±{stats.volatilityLate.toFixed(3)}
+                </div>
+              </div>
+            </div>
           </div>
-          <p className="text-xs text-gray-400 leading-relaxed">
-            {stats.trend === "up" ? (
-              <>
-                First impressions are{" "}
-                <span className="text-green-400 font-medium">
-                  more positive
-                </span>{" "}
-                than later ratings. Early viewers rate movies{" "}
-                {Math.abs(stats.avgDeltaFirstImpression).toFixed(3)} points
-                higher relative to the movie&apos;s overall average.
-              </>
-            ) : stats.trend === "down" ? (
-              <>
-                First impressions are{" "}
-                <span className="text-red-400 font-medium">more negative</span>{" "}
-                than later ratings. Early viewers rate movies{" "}
-                {Math.abs(stats.avgDeltaFirstImpression).toFixed(3)} points
-                lower relative to the movie&apos;s overall average.
-              </>
-            ) : (
-              <>
-                First impressions are{" "}
-                <span className="text-gray-300 font-medium">neutral</span>.
-                Early ratings closely match the movie&apos;s overall average,
-                showing no significant bias.
-              </>
-            )}
-          </p>
-        </CardBody>
-      </Card>
-    </div>
+
+          {/* Timing Statistics */}
+          <div className="border-t border-white/10 pt-3">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              When Do People Rate?
+            </div>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Median time since release</span>
+                <span className="text-gray-300 font-mono">
+                  {formatMonths(stats.medianMonthsSince)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">
+                  Average time since release
+                </span>
+                <span className="text-gray-300 font-mono">
+                  {formatMonths(stats.avgMonthsSince)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Peak activity at</span>
+                <span className="text-cyan-400 font-mono">
+                  {formatMonths(stats.peakMonth)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Unique Movies */}
+          <div className="border-t border-white/10 pt-3">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-400">Unique movies</span>
+              <span className="text-gray-300 font-mono">
+                {stats.uniqueMovies.toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          {/* Insight */}
+          <div className="border-t border-white/10 pt-3">
+            <div className="bg-white/5 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <span className="text-base">💡</span>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  {stats.trend === "up" ? (
+                    <>
+                      Early viewers rate{" "}
+                      <span className="text-green-400 font-medium">higher</span>{" "}
+                      than average.{" "}
+                      {stats.volatilityEarly > stats.volatilityLate
+                        ? "Opinions are more divided early on."
+                        : "Early ratings are more consistent."}
+                    </>
+                  ) : stats.trend === "down" ? (
+                    <>
+                      Early viewers rate{" "}
+                      <span className="text-red-400 font-medium">lower</span>{" "}
+                      than average.{" "}
+                      {stats.volatilityEarly > stats.volatilityLate
+                        ? "Initial reception is polarized."
+                        : "Early critics are consistently harsh."}
+                    </>
+                  ) : (
+                    <>
+                      Early and late ratings are{" "}
+                      <span className="text-gray-300 font-medium">similar</span>
+                      . Time since release has minimal effect on perceived
+                      quality.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
