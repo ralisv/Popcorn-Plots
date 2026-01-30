@@ -1,9 +1,9 @@
 import type { DataFrame } from "danfojs";
 
-import { Button, Card, CardBody, Chip, Input, Tooltip } from "@heroui/react";
+import { Card, CardBody, Chip, Input, Tooltip } from "@heroui/react";
 import * as d3 from "d3";
 import { regressionPoly } from "d3-regression";
-import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import { Layers, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpTooltip } from "../HelpTooltip";
@@ -530,7 +530,7 @@ export function RatingOverTimeChart({
               base: "w-48",
               input: "text-white text-sm placeholder:text-gray-400",
               inputWrapper:
-                "bg-black/60 backdrop-blur-md border-white/20 hover:border-white/40",
+                "bg-black/40 backdrop-blur-md border-white/10 hover:border-white/30",
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -543,27 +543,18 @@ export function RatingOverTimeChart({
             startContent={<Search className="w-4 h-4 text-gray-400" />}
             value={searchQuery}
           />
-          <Button
-            className="bg-purple-600 hover:bg-purple-500 text-white min-w-0 px-3"
-            onPress={() => {
-              setActiveSearch(searchQuery);
-            }}
-            size="sm"
-          >
-            Search
-          </Button>
           {activeSearch && (
-            <Button
-              className="bg-gray-600 hover:bg-gray-500 text-white min-w-0 px-2"
-              isIconOnly
-              onPress={() => {
+            <button
+              className="p-1.5 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 hover:border-white/30 text-gray-400 hover:text-white transition-colors"
+              onClick={() => {
                 setSearchQuery("");
                 setActiveSearch("");
               }}
-              size="sm"
+              title="Clear search"
+              type="button"
             >
               <X className="w-4 h-4" />
-            </Button>
+            </button>
           )}
         </div>
 
@@ -605,75 +596,69 @@ export function RatingOverTimeChart({
             ]}
             title="Ratings Over Time"
           />
-          <Card className="bg-black/40 backdrop-blur-md border-white/10">
-            <CardBody className="p-2">
-              <button
-                className="flex items-center gap-2 text-xs text-gray-300 hover:text-white transition-colors w-full"
-                onClick={() => {
-                  setIsLegendMinimized(!isLegendMinimized);
-                }}
-                type="button"
-              >
-                <span>Legend</span>
-                {isLegendMinimized ? (
-                  <ChevronDown className="w-3 h-3" />
-                ) : (
-                  <ChevronUp className="w-3 h-3" />
-                )}
-              </button>
-              <div
-                className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  isLegendMinimized
-                    ? "max-h-0 opacity-0"
-                    : "max-h-96 opacity-100"
-                }`}
-              >
-                <div className="flex flex-col gap-3 text-xs mt-3 pt-2 border-t border-white/10">
-                  {selectedGenres.length > 0 && (
-                    <div className="pb-3 border-b border-white/10">
-                      <div className="text-[10px] text-gray-400 mb-2">
-                        Filtered by:
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {selectedGenres.map((genre) => (
-                          <Chip
-                            color="secondary"
-                            key={genre}
-                            size="sm"
-                            variant="flat"
-                          >
-                            {genre}
-                          </Chip>
-                        ))}
-                      </div>
-                      <div className="text-[10px] text-gray-500 mt-2">
-                        {years.length.toLocaleString()} movies
-                      </div>
+          <button
+            className="p-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 hover:border-white/30 text-gray-400 hover:text-white transition-colors"
+            onClick={() => {
+              setIsLegendMinimized(!isLegendMinimized);
+            }}
+            title={isLegendMinimized ? "Show legend" : "Hide legend"}
+            type="button"
+          >
+            <Layers className="w-4 h-4" />
+          </button>
+          <Card
+            className={`bg-black/40 backdrop-blur-md border-white/10 overflow-hidden transition-all duration-300 ease-in-out ${
+              isLegendMinimized
+                ? "max-w-0 opacity-0 border-0 p-0"
+                : "max-w-xs opacity-100"
+            }`}
+          >
+            <CardBody className="p-3">
+              <div className="flex flex-col gap-3 text-xs">
+                {selectedGenres.length > 0 && (
+                  <div className="pb-3 border-b border-white/10">
+                    <div className="text-[10px] text-gray-400 mb-2">
+                      Filtered by:
                     </div>
-                  )}
-                  <div className="space-y-2">
-                    <Tooltip
-                      content="Each dot represents a movie's average rating"
-                      placement="left"
-                    >
-                      <div className="flex items-center gap-2 cursor-help">
-                        <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
-                        <span className="text-gray-300">Movie rating</span>
-                      </div>
-                    </Tooltip>
-                    <Tooltip
-                      content="Polynomial regression showing the overall trend"
-                      placement="left"
-                    >
-                      <div className="flex items-center gap-2 cursor-help">
-                        <span
-                          aria-hidden
-                          className="w-6 h-0.5 rounded bg-pink-400"
-                        />
-                        <span className="text-gray-300">Trend line</span>
-                      </div>
-                    </Tooltip>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedGenres.map((genre) => (
+                        <Chip
+                          color="secondary"
+                          key={genre}
+                          size="sm"
+                          variant="flat"
+                        >
+                          {genre}
+                        </Chip>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-2">
+                      {years.length.toLocaleString()} movies
+                    </div>
                   </div>
+                )}
+                <div className="space-y-2">
+                  <Tooltip
+                    content="Each dot represents a movie's average rating"
+                    placement="left"
+                  >
+                    <div className="flex items-center gap-2 cursor-help">
+                      <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
+                      <span className="text-gray-300">Movie rating</span>
+                    </div>
+                  </Tooltip>
+                  <Tooltip
+                    content="Polynomial regression showing the overall trend"
+                    placement="left"
+                  >
+                    <div className="flex items-center gap-2 cursor-help">
+                      <span
+                        aria-hidden
+                        className="w-6 h-0.5 rounded bg-pink-400"
+                      />
+                      <span className="text-gray-300">Trend line</span>
+                    </div>
+                  </Tooltip>
                 </div>
               </div>
             </CardBody>

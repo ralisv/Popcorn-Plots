@@ -1,4 +1,4 @@
-import { Button, Slider } from "@heroui/react";
+import { Slider } from "@heroui/react";
 import { Check, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -70,7 +70,7 @@ export function RangeSlider({
   return (
     <div
       className={[
-        "flex items-center gap-3 px-4 py-2 bg-black/30 backdrop-blur-sm rounded-lg border border-white/10",
+        "flex items-center gap-3 px-4 py-2 bg-black/40 backdrop-blur-md rounded-lg border border-white/10",
         className ?? "",
       ].join(" ")}
     >
@@ -102,31 +102,34 @@ export function RangeSlider({
         <span className="font-mono">{formatValue(tempRange[1])}</span>
       </div>
       <div className="flex items-center gap-1">
-        <Button
+        <button
           className={[
-            "min-w-0 h-7 px-2",
+            "p-1.5 rounded-lg border transition-colors",
             hasChanges
-              ? "bg-green-600 hover:bg-green-500"
-              : "bg-gray-700 hover:bg-gray-600",
+              ? "bg-black/40 backdrop-blur-md border-green-500/50 text-green-400 hover:border-green-400 hover:text-green-300"
+              : "bg-black/40 backdrop-blur-md border-white/10 text-gray-500 cursor-not-allowed",
           ].join(" ")}
-          isDisabled={!hasChanges}
-          onPress={handleConfirm}
-          size="sm"
+          disabled={!hasChanges}
+          onClick={handleConfirm}
           title="Apply filter"
-          variant="flat"
+          type="button"
         >
           <Check className="w-4 h-4" />
-        </Button>
-        <Button
-          className="min-w-0 h-7 px-2 bg-gray-700 hover:bg-gray-600"
-          isDisabled={isDefault && !hasChanges}
-          onPress={handleReset}
-          size="sm"
+        </button>
+        <button
+          className={[
+            "p-1.5 rounded-lg border transition-colors",
+            isDefault && !hasChanges
+              ? "bg-black/40 backdrop-blur-md border-white/10 text-gray-500 cursor-not-allowed"
+              : "bg-black/40 backdrop-blur-md border-white/10 text-gray-400 hover:border-white/30 hover:text-white",
+          ].join(" ")}
+          disabled={isDefault && !hasChanges}
+          onClick={handleReset}
           title="Reset to default"
-          variant="flat"
+          type="button"
         >
           <RotateCcw className="w-4 h-4" />
-        </Button>
+        </button>
       </div>
     </div>
   );

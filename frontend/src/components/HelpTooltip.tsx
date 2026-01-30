@@ -60,10 +60,10 @@ export function HelpTooltip({
     >
       <button
         aria-label={`Help: ${title}`}
-        className="p-1.5 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 text-gray-500 hover:text-purple-400 hover:bg-black/50 hover:border-purple-500/30 transition-all duration-200 cursor-help"
+        className="p-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 text-gray-400 hover:text-white hover:border-white/30 transition-colors cursor-help"
         type="button"
       >
-        <CircleHelp size={14} strokeWidth={2} />
+        <CircleHelp className="w-4 h-4" />
       </button>
     </Tooltip>
   );

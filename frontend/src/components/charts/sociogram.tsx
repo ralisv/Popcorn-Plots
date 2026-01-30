@@ -1,4 +1,4 @@
-import { Button, Card, CardBody, Chip } from "@heroui/react";
+import { Card, CardBody, Chip } from "@heroui/react";
 import * as d3 from "d3";
 import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -643,7 +643,7 @@ export function Sociogram({
     >
       {/* Selected Genres Display */}
       {selectedGenres.length > 0 && (
-        <Card className="absolute top-4 left-1/2 -translate-x-1/2 z-30 max-w-2xl bg-black/50 backdrop-blur-md border-white/10">
+        <Card className="absolute top-4 left-1/2 -translate-x-1/2 z-30 max-w-2xl bg-black/40 backdrop-blur-md border-white/10">
           <CardBody className="p-4">
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-xs font-semibold text-gray-400">
@@ -799,16 +799,14 @@ export function Sociogram({
 
       {dataNodes.length > 0 && (
         <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-          <Button
-            className="bg-black/40 backdrop-blur-md border-white/10 text-gray-300 hover:text-white hover:bg-black/60"
-            onPress={handleResetView}
-            size="sm"
-            startContent={<RotateCcw className="w-3 h-3" />}
+          <button
+            className="p-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 hover:border-white/30 text-gray-400 hover:text-white transition-colors"
+            onClick={handleResetView}
             title="Reset view"
-            variant="bordered"
+            type="button"
           >
-            Reset View
-          </Button>
+            <RotateCcw className="w-4 h-4" />
+          </button>
           <HelpTooltip
             description="Discover how movie genres relate to each other. Larger nodes represent more popular genres. Thicker connections mean genres appear together more often."
             interactions={[
