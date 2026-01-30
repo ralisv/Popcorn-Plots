@@ -159,7 +159,10 @@ export function Sociogram({
     svg
       .transition()
       .duration(500)
-      .call(zoomBehaviorRef.current.transform, d3.zoomIdentity);
+      .call(
+        zoomBehaviorRef.current.transform.bind(zoomBehaviorRef.current),
+        d3.zoomIdentity,
+      );
 
     // Restart simulation to re-center nodes
     if (simulationRef.current) {
