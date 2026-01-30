@@ -74,10 +74,10 @@ export function RangeSlider({
         className ?? "",
       ].join(" ")}
     >
-      <span className="text-xs text-gray-400 whitespace-nowrap min-w-[80px]">
+      <span className="text-xs text-gray-400 whitespace-nowrap min-w-[60px]">
         {label}:
       </span>
-      <div className="flex-grow min-w-[200px] max-w-[400px]">
+      <div className="flex-1">
         <Slider
           classNames={{
             base: "gap-3",
