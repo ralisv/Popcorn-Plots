@@ -55,6 +55,12 @@ export function RatingVsRuntimeChart({
   const [xRangeMin, setXRangeMin] = useState<number>(60);
   const [xRangeMax, setXRangeMax] = useState<number>(180);
 
+  // Zoom state
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [zoomCenter, setZoomCenter] = useState<null | { x: number; y: number }>(
+    null,
+  );
+
   // Extract all filtered data from DataFrame (individual movies) - without x-range filter
   const allData = useMemo(() => {
     if (!df) return { avgRatings: [], genres: [], runtimes: [], titles: [] };
@@ -228,15 +234,41 @@ export function RatingVsRuntimeChart({
     const yMin = Math.floor((d3.min(avgRatings) ?? 0) * 2) / 2;
     const yMax = Math.ceil((d3.max(avgRatings) ?? 10) * 2) / 2;
 
+    // Calculate zoom domains
+    let xDomain: [number, number] = [xExtent[0], xExtent[1]];
+    let yDomain: [number, number] = [
+      Math.max(0, yMin - 0.5),
+      Math.min(10, yMax + 0.5),
+    ];
+
+    if (isZoomed && zoomCenter) {
+      // Zoom to ~10% of the range centered on click point
+      const xRange = xExtent[1] - xExtent[0];
+      const yRange = yDomain[1] - yDomain[0];
+      const zoomFactor = 0.1;
+
+      const xHalfRange = (xRange * zoomFactor) / 2;
+      const yHalfRange = (yRange * zoomFactor) / 2;
+
+      xDomain = [
+        Math.max(xExtent[0], zoomCenter.x - xHalfRange),
+        Math.min(xExtent[1], zoomCenter.x + xHalfRange),
+      ];
+      yDomain = [
+        Math.max(0, zoomCenter.y - yHalfRange),
+        Math.min(10, zoomCenter.y + yHalfRange),
+      ];
+    }
+
     const xScale = d3
       .scaleLinear()
-      .domain([xExtent[0], xExtent[1]])
+      .domain(xDomain)
       .range([0, innerWidth])
       .nice();
 
     const yScale = d3
       .scaleLinear()
-      .domain([Math.max(0, yMin - 0.5), Math.min(10, yMax + 0.5)])
+      .domain(yDomain)
       .range([innerHeight, 0])
       .nice();
 
@@ -311,7 +343,7 @@ export function RatingVsRuntimeChart({
       .attr("x", -innerHeight / 2)
       .attr("text-anchor", "middle")
       .attr("font-size", 12)
-      .text("Average Rating");
+      .text("Rating");
 
     // Create index array for data binding
     const indices = d3.range(runtimes.length);
@@ -394,12 +426,29 @@ export function RatingVsRuntimeChart({
       .attr("width", innerWidth)
       .attr("height", innerHeight)
       .attr("fill", "transparent")
-      .style("cursor", "crosshair")
+      .style("cursor", isZoomed ? "zoom-out" : "zoom-in")
       .on("mousemove", (event: MouseEvent) => {
         handleMouseMove(event, xScale, yScale, margin);
       })
       .on("mouseleave", () => {
         setHoveredPoint(null);
+      })
+      .on("click", (event: MouseEvent) => {
+        if (isZoomed) {
+          // Unzoom
+          setIsZoomed(false);
+          setZoomCenter(null);
+        } else {
+          // Zoom to click location
+          const bbox = containerRef.current?.getBoundingClientRect();
+          if (!bbox) return;
+          const mouseX = event.clientX - bbox.left - margin.left;
+          const mouseY = event.clientY - bbox.top - margin.top;
+          const dataX = xScale.invert(mouseX);
+          const dataY = yScale.invert(mouseY);
+          setZoomCenter({ x: dataX, y: dataY });
+          setIsZoomed(true);
+        }
       });
   }, [
     avgRatings,
@@ -409,6 +458,8 @@ export function RatingVsRuntimeChart({
     jitterValues,
     dimensions,
     handleMouseMove,
+    isZoomed,
+    zoomCenter,
   ]);
 
   return (
