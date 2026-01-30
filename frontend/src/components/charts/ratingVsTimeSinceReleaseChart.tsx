@@ -405,7 +405,7 @@ export function RatingVsTimeSinceReleaseChart({
 
     const xScale = d3
       .scaleLinear()
-      .domain([0, xExtent[1]])
+      .domain([xExtent[0], xExtent[1]])
       .range([0, innerWidth])
       .nice();
 
