@@ -1,8 +1,9 @@
 import type { DataFrame } from "danfojs";
 
-import { Card, CardBody, Chip, Tooltip } from "@heroui/react";
+import { Button, Card, CardBody, Chip, Input, Tooltip } from "@heroui/react";
 import * as d3 from "d3";
 import { regressionPoly } from "d3-regression";
+import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpTooltip } from "../HelpTooltip";
@@ -35,14 +36,18 @@ export function RatingOverTimeChart({
   const [hoveredPoint, setHoveredPoint] = useState<HoveredPoint | null>(null);
 
   // X-axis range filter state
-  const [xRangeMin, setXRangeMin] = useState<number | null>(null);
-  const [xRangeMax, setXRangeMax] = useState<number | null>(null);
+  const [xRangeMin, setXRangeMin] = useState<null | number>(null);
+  const [xRangeMax, setXRangeMax] = useState<null | number>(null);
 
   // Zoom state
   const [isZoomed, setIsZoomed] = useState(false);
   const [zoomCenter, setZoomCenter] = useState<null | { x: number; y: number }>(
     null,
   );
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeSearch, setActiveSearch] = useState("");
 
   // Extract all filtered data from DataFrame (without x-range filter)
   const allData = useMemo(() => {
@@ -220,6 +225,17 @@ export function RatingOverTimeChart({
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
+    // Create defs for clipping
+    const defs = svg.append("defs");
+
+    // Add clip path to hide points outside chart area
+    defs
+      .append("clipPath")
+      .attr("id", "chart-clip-rating-time")
+      .append("rect")
+      .attr("width", innerWidth)
+      .attr("height", innerHeight);
+
     const chartG = g
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
@@ -343,34 +359,59 @@ export function RatingOverTimeChart({
     // Create index array for data binding
     const indices = d3.range(years.length);
     const pointColor = "#c800ffff";
+    const highlightColor = "#fbbf24"; // Amber color for search matches
 
-    chartG
+    // Point sizes - larger when zoomed
+    const baseSize = isZoomed ? 10 : 2;
+    const highlightSize = isZoomed ? 20 : 6;
+    const hoverSize = isZoomed ? 24 : 8;
+
+    // Find matched indices based on search
+    const matchedIndices = new Set<number>();
+    if (activeSearch.trim()) {
+      const searchLower = activeSearch.toLowerCase();
+      for (let i = 0; i < titles.length; i++) {
+        if (titles[i].toLowerCase().includes(searchLower)) {
+          matchedIndices.add(i);
+        }
+      }
+    }
+
+    // Create a clipped group for scatter points
+    const pointsG = chartG
+      .append("g")
+      .attr("clip-path", "url(#chart-clip-rating-time)");
+
+    pointsG
       .selectAll("circle")
       .data(indices)
       .join("circle")
       .attr("cx", (i) => xScale(years[i] + jitterValues[i]))
       .attr("cy", (i) => yScale(avgRatings[i]))
-      .attr("r", 2)
-      .attr("fill", pointColor)
-      .attr("fill-opacity", 0.5)
-      .attr("stroke", pointColor)
-      .attr("stroke-width", 0)
+      .attr("r", (i) => (matchedIndices.has(i) ? highlightSize : baseSize))
+      .attr("fill", (i) =>
+        matchedIndices.has(i) ? highlightColor : pointColor,
+      )
+      .attr("fill-opacity", (i) => (matchedIndices.has(i) ? 1 : 0.5))
+      .attr("stroke", (i) => (matchedIndices.has(i) ? "#fff" : pointColor))
+      .attr("stroke-width", (i) => (matchedIndices.has(i) ? 2 : 0))
       .style("cursor", "pointer")
       .on("mouseenter", function () {
         d3.select(this)
           .transition()
           .duration(150)
-          .attr("r", 8)
-          .attr("fill-opacity", 0.9)
+          .attr("r", hoverSize)
+          .attr("fill-opacity", 1)
           .attr("stroke-width", 2);
       })
-      .on("mouseleave", function () {
+      .on("mouseleave", function (_, i) {
+        const isMatched = matchedIndices.has(i);
         d3.select(this)
           .transition()
           .duration(150)
-          .attr("r", 4)
-          .attr("fill-opacity", 0.5)
-          .attr("stroke-width", 1);
+          .attr("r", isMatched ? highlightSize : baseSize)
+          .attr("fill-opacity", isMatched ? 1 : 0.5)
+          .attr("stroke-width", isMatched ? 2 : 0);
       });
 
     // Build data array for regression
@@ -393,8 +434,7 @@ export function RatingOverTimeChart({
       .y((d) => yScale(d[1]))
       .curve(d3.curveCatmullRom);
 
-    // Add glow effect for trend line
-    const defs = svg.append("defs");
+    // Add glow effect for trend line (reuse existing defs)
     const glowFilter = defs.append("filter").attr("id", "trend-glow");
     glowFilter
       .append("feGaussianBlur")
@@ -454,6 +494,7 @@ export function RatingOverTimeChart({
     handleMouseMove,
     isZoomed,
     zoomCenter,
+    activeSearch,
   ]);
 
   return (
@@ -478,6 +519,50 @@ export function RatingOverTimeChart({
         >
           <g ref={gRef} />
         </svg>
+
+        {/* Search Input */}
+        <div className="absolute top-4 left-20 flex items-center gap-2">
+          <Input
+            classNames={{
+              base: "w-48",
+              input: "text-white text-sm placeholder:text-gray-400",
+              inputWrapper:
+                "bg-black/60 backdrop-blur-md border-white/20 hover:border-white/40",
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setActiveSearch(searchQuery);
+              }
+            }}
+            onValueChange={setSearchQuery}
+            placeholder="Search movies..."
+            size="sm"
+            startContent={<Search className="w-4 h-4 text-gray-400" />}
+            value={searchQuery}
+          />
+          <Button
+            className="bg-purple-600 hover:bg-purple-500 text-white min-w-0 px-3"
+            onPress={() => {
+              setActiveSearch(searchQuery);
+            }}
+            size="sm"
+          >
+            Search
+          </Button>
+          {activeSearch && (
+            <Button
+              className="bg-gray-600 hover:bg-gray-500 text-white min-w-0 px-2"
+              isIconOnly
+              onPress={() => {
+                setSearchQuery("");
+                setActiveSearch("");
+              }}
+              size="sm"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
 
         {/* Hover Tooltip */}
         {hoveredPoint && (

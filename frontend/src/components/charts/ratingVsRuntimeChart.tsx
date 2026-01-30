@@ -1,8 +1,9 @@
 import type { DataFrame } from "danfojs";
 
-import { Card, CardBody, Chip, Tooltip } from "@heroui/react";
+import { Button, Card, CardBody, Chip, Input, Tooltip } from "@heroui/react";
 import * as d3 from "d3";
 import { regressionPoly } from "d3-regression";
+import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpTooltip } from "../HelpTooltip";
@@ -60,6 +61,10 @@ export function RatingVsRuntimeChart({
   const [zoomCenter, setZoomCenter] = useState<null | { x: number; y: number }>(
     null,
   );
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeSearch, setActiveSearch] = useState("");
 
   // Extract all filtered data from DataFrame (individual movies) - without x-range filter
   const allData = useMemo(() => {
@@ -225,6 +230,17 @@ export function RatingVsRuntimeChart({
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
+    // Create defs for clipping
+    const defs = svg.append("defs");
+
+    // Add clip path to hide points outside chart area
+    defs
+      .append("clipPath")
+      .attr("id", "chart-clip-rating-runtime")
+      .append("rect")
+      .attr("width", innerWidth)
+      .attr("height", innerHeight);
+
     const chartG = g
       .append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
@@ -348,34 +364,59 @@ export function RatingVsRuntimeChart({
     // Create index array for data binding
     const indices = d3.range(runtimes.length);
     const pointColor = "#10b981"; // Emerald color
+    const highlightColor = "#fbbf24"; // Amber color for search matches
 
-    chartG
+    // Point sizes - larger when zoomed
+    const baseSize = isZoomed ? 10 : 2;
+    const highlightSize = isZoomed ? 20 : 6;
+    const hoverSize = isZoomed ? 24 : 8;
+
+    // Find matched indices based on search
+    const matchedIndices = new Set<number>();
+    if (activeSearch.trim()) {
+      const searchLower = activeSearch.toLowerCase();
+      for (let i = 0; i < titles.length; i++) {
+        if (titles[i].toLowerCase().includes(searchLower)) {
+          matchedIndices.add(i);
+        }
+      }
+    }
+
+    // Create a clipped group for scatter points
+    const pointsG = chartG
+      .append("g")
+      .attr("clip-path", "url(#chart-clip-rating-runtime)");
+
+    pointsG
       .selectAll("circle")
       .data(indices)
       .join("circle")
       .attr("cx", (i) => xScale(runtimes[i] + jitterValues[i]))
       .attr("cy", (i) => yScale(avgRatings[i]))
-      .attr("r", 2)
-      .attr("fill", pointColor)
-      .attr("fill-opacity", 0.5)
-      .attr("stroke", pointColor)
-      .attr("stroke-width", 0)
+      .attr("r", (i) => (matchedIndices.has(i) ? highlightSize : baseSize))
+      .attr("fill", (i) =>
+        matchedIndices.has(i) ? highlightColor : pointColor,
+      )
+      .attr("fill-opacity", (i) => (matchedIndices.has(i) ? 1 : 0.5))
+      .attr("stroke", (i) => (matchedIndices.has(i) ? "#fff" : pointColor))
+      .attr("stroke-width", (i) => (matchedIndices.has(i) ? 2 : 0))
       .style("cursor", "pointer")
       .on("mouseenter", function () {
         d3.select(this)
           .transition()
           .duration(150)
-          .attr("r", 8)
-          .attr("fill-opacity", 0.9)
+          .attr("r", hoverSize)
+          .attr("fill-opacity", 1)
           .attr("stroke-width", 2);
       })
-      .on("mouseleave", function () {
+      .on("mouseleave", function (_, i) {
+        const isMatched = matchedIndices.has(i);
         d3.select(this)
           .transition()
           .duration(150)
-          .attr("r", 2)
-          .attr("fill-opacity", 0.5)
-          .attr("stroke-width", 0);
+          .attr("r", isMatched ? highlightSize : baseSize)
+          .attr("fill-opacity", isMatched ? 1 : 0.5)
+          .attr("stroke-width", isMatched ? 2 : 0);
       });
 
     // Build data array for regression
@@ -398,8 +439,7 @@ export function RatingVsRuntimeChart({
       .y((d) => yScale(d[1]))
       .curve(d3.curveCatmullRom);
 
-    // Add glow effect for trend line
-    const defs = svg.append("defs");
+    // Add glow effect for trend line (reuse existing defs)
     const glowFilter = defs.append("filter").attr("id", "trend-glow-runtime");
     glowFilter
       .append("feGaussianBlur")
@@ -460,6 +500,7 @@ export function RatingVsRuntimeChart({
     handleMouseMove,
     isZoomed,
     zoomCenter,
+    activeSearch,
   ]);
 
   return (
@@ -484,6 +525,50 @@ export function RatingVsRuntimeChart({
         >
           <g ref={gRef} />
         </svg>
+
+        {/* Search Input */}
+        <div className="absolute top-4 left-20 flex items-center gap-2">
+          <Input
+            classNames={{
+              base: "w-48",
+              input: "text-white text-sm placeholder:text-gray-400",
+              inputWrapper:
+                "bg-black/60 backdrop-blur-md border-white/20 hover:border-white/40",
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setActiveSearch(searchQuery);
+              }
+            }}
+            onValueChange={setSearchQuery}
+            placeholder="Search movies..."
+            size="sm"
+            startContent={<Search className="w-4 h-4 text-gray-400" />}
+            value={searchQuery}
+          />
+          <Button
+            className="bg-emerald-600 hover:bg-emerald-500 text-white min-w-0 px-3"
+            onPress={() => {
+              setActiveSearch(searchQuery);
+            }}
+            size="sm"
+          >
+            Search
+          </Button>
+          {activeSearch && (
+            <Button
+              className="bg-gray-600 hover:bg-gray-500 text-white min-w-0 px-2"
+              isIconOnly
+              onPress={() => {
+                setSearchQuery("");
+                setActiveSearch("");
+              }}
+              size="sm"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
 
         {/* Hover Tooltip */}
         {hoveredPoint && (
