@@ -3,7 +3,7 @@ import type { DataFrame } from "danfojs";
 import { Card, CardBody, Chip, Tooltip } from "@heroui/react";
 import * as d3 from "d3";
 import { regressionLoess } from "d3-regression";
-import { TrendingDown, TrendingUp } from "lucide-react";
+import { ChevronDown, ChevronUp, TrendingDown, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpTooltip } from "../HelpTooltip";
@@ -58,6 +58,9 @@ export function RatingVsTimeSinceReleaseChart({
   const [hoveredPoint, setHoveredPoint] = useState<HoveredPoint | null>(null);
   const [xRangeMin, setXRangeMin] = useState<null | number>(null);
   const [xRangeMax, setXRangeMax] = useState<null | number>(null);
+
+  // Legend state
+  const [isLegendMinimized, setIsLegendMinimized] = useState(false);
 
   // Pre-compute title data (only depends on titlesDf)
   const titleData = useMemo(() => {
@@ -238,11 +241,11 @@ export function RatingVsTimeSinceReleaseChart({
     return { max: Math.ceil(extent[1] / 12), min: Math.floor(extent[0] / 12) };
   }, [allData]);
 
-  // Initialize x-range to 0-35 years by default
+  // Initialize x-range to 0-2 years by default
   useEffect(() => {
     if (allData.length > 0 && xRangeMin === null && xRangeMax === null) {
       setXRangeMin(0);
-      setXRangeMax(45);
+      setXRangeMax(2);
     }
   }, [allData, xRangeMin, xRangeMax]);
 
@@ -686,72 +689,93 @@ export function RatingVsTimeSinceReleaseChart({
             description="Each dot represents the normalized average rating (rating minus movie's overall average) at a specific number of years after release. Values above 0 mean higher than average ratings. This shows how perception changes over time."
             interactions={[
               { icon: "👆", text: "Hover points for details" },
-              { icon: "🎭", text: "Select genres in the network to filter" },
               { icon: "⚪", text: "Dot size = number of ratings" },
             ]}
             title="Normalized Rating vs Time Since Release"
           />
-          <Card className="pointer-events-none bg-black/40 backdrop-blur-md border-white/10">
-            <CardBody className="p-4">
-              <div className="flex flex-col gap-3 text-xs">
-                {selectedGenres.length > 0 && (
-                  <div className="pb-3 border-b border-white/10">
-                    <div className="text-[10px] text-gray-400 mb-2">
-                      Filtered by:
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedGenres.map((genre) => (
-                        <Chip
-                          color="secondary"
-                          key={genre}
-                          size="sm"
-                          variant="flat"
-                        >
-                          {genre}
-                        </Chip>
-                      ))}
-                    </div>
-                    <div className="text-[10px] text-gray-500 mt-2">
-                      {totalRatings.toLocaleString()} ratings
-                    </div>
-                  </div>
+          <Card className="bg-black/40 backdrop-blur-md border-white/10">
+            <CardBody className="p-2">
+              <button
+                className="flex items-center gap-2 text-xs text-gray-300 hover:text-white transition-colors w-full"
+                onClick={() => {
+                  setIsLegendMinimized(!isLegendMinimized);
+                }}
+                type="button"
+              >
+                <span>Legend</span>
+                {isLegendMinimized ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronUp className="w-3 h-3" />
                 )}
-                <div className="space-y-2">
-                  <Tooltip
-                    content="Normalized rating (vs movie avg) at years after release"
-                    placement="left"
-                  >
-                    <div className="flex items-center gap-2 cursor-help">
-                      <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-cyan-500 to-teal-500" />
-                      <span className="text-gray-300">
-                        Rating delta by time
-                      </span>
+              </button>
+              <div
+                className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                  isLegendMinimized
+                    ? "max-h-0 opacity-0"
+                    : "max-h-96 opacity-100"
+                }`}
+              >
+                <div className="flex flex-col gap-3 text-xs mt-3 pt-2 border-t border-white/10">
+                  {selectedGenres.length > 0 && (
+                    <div className="pb-3 border-b border-white/10">
+                      <div className="text-[10px] text-gray-400 mb-2">
+                        Filtered by:
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {selectedGenres.map((genre) => (
+                          <Chip
+                            color="secondary"
+                            key={genre}
+                            size="sm"
+                            variant="flat"
+                          >
+                            {genre}
+                          </Chip>
+                        ))}
+                      </div>
+                      <div className="text-[10px] text-gray-500 mt-2">
+                        {totalRatings.toLocaleString()} ratings
+                      </div>
                     </div>
-                  </Tooltip>
-                  <Tooltip
-                    content="Polynomial regression showing the overall trend"
-                    placement="left"
-                  >
-                    <div className="flex items-center gap-2 cursor-help">
-                      <span
-                        aria-hidden
-                        className="w-6 h-0.5 rounded bg-cyan-400"
-                      />
-                      <span className="text-gray-300">Trend line</span>
-                    </div>
-                  </Tooltip>
-                  <Tooltip
-                    content="Zero line - ratings at this level match movie average"
-                    placement="left"
-                  >
-                    <div className="flex items-center gap-2 cursor-help">
-                      <span
-                        aria-hidden
-                        className="w-6 h-0.5 rounded border-b border-dashed border-white/30"
-                      />
-                      <span className="text-gray-300">Movie average</span>
-                    </div>
-                  </Tooltip>
+                  )}
+                  <div className="space-y-2">
+                    <Tooltip
+                      content="Normalized rating (vs movie avg) at years after release"
+                      placement="left"
+                    >
+                      <div className="flex items-center gap-2 cursor-help">
+                        <span className="inline-block w-3 h-3 rounded-full bg-gradient-to-r from-cyan-500 to-teal-500" />
+                        <span className="text-gray-300">
+                          Rating delta by time
+                        </span>
+                      </div>
+                    </Tooltip>
+                    <Tooltip
+                      content="Polynomial regression showing the overall trend"
+                      placement="left"
+                    >
+                      <div className="flex items-center gap-2 cursor-help">
+                        <span
+                          aria-hidden
+                          className="w-6 h-0.5 rounded bg-cyan-400"
+                        />
+                        <span className="text-gray-300">Trend line</span>
+                      </div>
+                    </Tooltip>
+                    <Tooltip
+                      content="Zero line - ratings at this level match movie average"
+                      placement="left"
+                    >
+                      <div className="flex items-center gap-2 cursor-help">
+                        <span
+                          aria-hidden
+                          className="w-6 h-0.5 rounded border-b border-dashed border-white/30"
+                        />
+                        <span className="text-gray-300">Movie average</span>
+                      </div>
+                    </Tooltip>
+                  </div>
                 </div>
               </div>
             </CardBody>
@@ -793,7 +817,7 @@ export function RatingVsTimeSinceReleaseChart({
 
       {/* X-Axis Range Slider */}
       <RangeSlider
-        defaultMax={45}
+        defaultMax={2}
         defaultMin={0}
         formatValue={(v) => `${v}y`}
         label="Years Since Release"

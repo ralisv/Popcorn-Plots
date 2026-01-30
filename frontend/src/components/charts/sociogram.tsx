@@ -1,5 +1,6 @@
-import { Card, CardBody, Chip } from "@heroui/react";
+import { Button, Card, CardBody, Chip } from "@heroui/react";
 import * as d3 from "d3";
+import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HelpTooltip } from "../HelpTooltip";
 
@@ -109,6 +110,16 @@ export function Sociogram({
   const [hoveredLink, setHoveredLink] = useState<HoveredLinkState>(null);
   const [hoveredNode, setHoveredNode] = useState<HoveredNodeState>(null);
 
+  // Refs to store zoom behavior and simulation for reset functionality
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<
+    SVGSVGElement,
+    unknown
+  > | null>(null);
+  const simulationRef = useRef<d3.Simulation<
+    GenreNodeDatum,
+    GenreLinkDatum
+  > | null>(null);
+
   const selectedGenresRef = useRef(selectedGenres);
   useEffect(() => {
     selectedGenresRef.current = selectedGenres;
@@ -138,6 +149,28 @@ export function Sociogram({
     },
     [onSelectedGenresChange],
   );
+
+  const handleResetView = useCallback((): void => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return;
+
+    const svg = d3.select(svgRef.current);
+
+    // Reset zoom to identity transform with smooth transition
+    svg
+      .transition()
+      .duration(500)
+      .call(zoomBehaviorRef.current.transform, d3.zoomIdentity);
+
+    // Restart simulation to re-center nodes
+    if (simulationRef.current) {
+      // Release all fixed positions
+      simulationRef.current.nodes().forEach((node) => {
+        node.fx = null;
+        node.fy = null;
+      });
+      simulationRef.current.alpha(0.5).restart();
+    }
+  }, []);
 
   const { dataLinks, dataNodes } = useMemo(() => {
     return {
@@ -201,6 +234,9 @@ export function Sociogram({
       .on("end", () => {
         svg.style("cursor", "grab");
       });
+
+    // Store zoom behavior ref for reset functionality
+    zoomBehaviorRef.current = zoomBehavior;
 
     svg.call(zoomBehavior).style("cursor", "grab");
 
@@ -571,6 +607,9 @@ export function Sociogram({
     nodeSel.call(dragBehavior);
     simulation.alpha(1).restart();
 
+    // Store simulation ref for reset functionality
+    simulationRef.current = simulation;
+
     return () => {
       simulation.stop();
       svg.on(".zoom", null);
@@ -759,7 +798,17 @@ export function Sociogram({
       )}
 
       {dataNodes.length > 0 && (
-        <div className="absolute top-4 right-4 z-50">
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+          <Button
+            className="bg-black/40 backdrop-blur-md border-white/10 text-gray-300 hover:text-white hover:bg-black/60"
+            onPress={handleResetView}
+            size="sm"
+            startContent={<RotateCcw className="w-3 h-3" />}
+            title="Reset view"
+            variant="bordered"
+          >
+            Reset View
+          </Button>
           <HelpTooltip
             description="Discover how movie genres relate to each other. Larger nodes represent more popular genres. Thicker connections mean genres appear together more often."
             interactions={[

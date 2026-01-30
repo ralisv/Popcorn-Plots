@@ -627,7 +627,13 @@ export function RatingVsRuntimeChart({
                   <ChevronUp className="w-3 h-3" />
                 )}
               </button>
-              {!isLegendMinimized && (
+              <div
+                className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                  isLegendMinimized
+                    ? "max-h-0 opacity-0"
+                    : "max-h-96 opacity-100"
+                }`}
+              >
                 <div className="flex flex-col gap-3 text-xs mt-3 pt-2 border-t border-white/10">
                   {selectedGenres.length > 0 && (
                     <div className="pb-3 border-b border-white/10">
@@ -675,7 +681,7 @@ export function RatingVsRuntimeChart({
                     </Tooltip>
                   </div>
                 </div>
-              )}
+              </div>
             </CardBody>
           </Card>
         </div>
