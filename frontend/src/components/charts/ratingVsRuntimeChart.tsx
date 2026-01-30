@@ -946,7 +946,7 @@ export function RuntimeKPIPanel({
             <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
               Dispersion
             </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-2 gap-2 text-center">
               <div>
                 <div className="text-[10px] text-gray-400">Std Dev</div>
                 <div className="text-sm font-mono text-gray-300">
@@ -957,12 +957,6 @@ export function RuntimeKPIPanel({
                 <div className="text-[10px] text-gray-400">Range</div>
                 <div className="text-sm font-mono text-gray-300">
                   {stats.runtimeRange}m
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] text-gray-400">CV</div>
-                <div className="text-sm font-mono text-gray-300">
-                  {stats.coefficientOfVariation.toFixed(1)}%
                 </div>
               </div>
             </div>
