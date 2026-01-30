@@ -686,11 +686,8 @@ export function RatingVsTimeSinceReleaseChart({
         {/* Legend Card with Help */}
         <div className="absolute top-4 right-4 flex items-start gap-2">
           <HelpTooltip
-            description="Each dot represents the normalized average rating (rating minus movie's overall average) at a specific number of years after release. Values above 0 mean higher than average ratings. This shows how perception changes over time."
-            interactions={[
-              { icon: "👆", text: "Hover points for details" },
-              { icon: "⚪", text: "Dot size = number of ratings" },
-            ]}
+            description="Each dot represents the normalized average rating (rating minus movie's overall average) at a specific number of years after release. Values above 0 mean higher than average ratings. This shows how perception changes over time. Dot size indicates number of ratings."
+            interactions={[{ icon: "👆", text: "Hover points for details" }]}
             title="Normalized Rating vs Time Since Release"
           />
           <Card className="bg-black/40 backdrop-blur-md border-white/10">
