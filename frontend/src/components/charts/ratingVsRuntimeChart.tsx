@@ -390,19 +390,20 @@ export function RatingVsRuntimeChart({
       .append("g")
       .attr("clip-path", "url(#chart-clip-rating-runtime)");
 
+    // First render all regular (non-highlighted) circles
+    const regularIndices = indices.filter((i) => !matchedIndices.has(i));
     pointsG
-      .selectAll("circle")
-      .data(indices)
+      .selectAll("circle.regular")
+      .data(regularIndices)
       .join("circle")
+      .attr("class", "regular")
       .attr("cx", (i) => xScale(runtimes[i] + jitterValues[i]))
       .attr("cy", (i) => yScale(avgRatings[i]))
-      .attr("r", (i) => (matchedIndices.has(i) ? highlightSize : baseSize))
-      .attr("fill", (i) =>
-        matchedIndices.has(i) ? highlightColor : pointColor,
-      )
-      .attr("fill-opacity", (i) => (matchedIndices.has(i) ? 1 : 0.5))
-      .attr("stroke", (i) => (matchedIndices.has(i) ? "#fff" : pointColor))
-      .attr("stroke-width", (i) => (matchedIndices.has(i) ? 2 : 0))
+      .attr("r", baseSize)
+      .attr("fill", pointColor)
+      .attr("fill-opacity", 0.5)
+      .attr("stroke", pointColor)
+      .attr("stroke-width", 0)
       .style("cursor", "pointer")
       .on("mouseenter", function () {
         d3.select(this)
@@ -412,14 +413,45 @@ export function RatingVsRuntimeChart({
           .attr("fill-opacity", 1)
           .attr("stroke-width", 2);
       })
-      .on("mouseleave", function (_, i) {
-        const isMatched = matchedIndices.has(i);
+      .on("mouseleave", function () {
         d3.select(this)
           .transition()
           .duration(150)
-          .attr("r", isMatched ? highlightSize : baseSize)
-          .attr("fill-opacity", isMatched ? 1 : 0.5)
-          .attr("stroke-width", isMatched ? 2 : 0);
+          .attr("r", baseSize)
+          .attr("fill-opacity", 0.5)
+          .attr("stroke-width", 0);
+      });
+
+    // Then render highlighted circles on top
+    const highlightedIndices = indices.filter((i) => matchedIndices.has(i));
+    pointsG
+      .selectAll("circle.highlighted")
+      .data(highlightedIndices)
+      .join("circle")
+      .attr("class", "highlighted")
+      .attr("cx", (i) => xScale(runtimes[i] + jitterValues[i]))
+      .attr("cy", (i) => yScale(avgRatings[i]))
+      .attr("r", highlightSize)
+      .attr("fill", highlightColor)
+      .attr("fill-opacity", 1)
+      .attr("stroke", "#fff")
+      .attr("stroke-width", 2)
+      .style("cursor", "pointer")
+      .on("mouseenter", function () {
+        d3.select(this)
+          .transition()
+          .duration(150)
+          .attr("r", hoverSize)
+          .attr("fill-opacity", 1)
+          .attr("stroke-width", 2);
+      })
+      .on("mouseleave", function () {
+        d3.select(this)
+          .transition()
+          .duration(150)
+          .attr("r", highlightSize)
+          .attr("fill-opacity", 1)
+          .attr("stroke-width", 2);
       });
 
     // Build data array for regression
