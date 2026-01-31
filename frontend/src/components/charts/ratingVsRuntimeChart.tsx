@@ -1,18 +1,18 @@
 import type { DataFrame } from "danfojs";
 
-import { Card, CardBody, Chip, Tooltip } from "@heroui/react";
+import { Button, Card, CardBody, Chip, Tooltip } from "@heroui/react";
 import * as d3 from "d3";
 import { regressionPoly } from "d3-regression";
 import { Layers } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { imdbTitleUrl } from "../../utils";
 import { HelpTooltip } from "../HelpTooltip";
 import { RangeSlider } from "../RangeSlider";
 import {
   type MovieSuggestion,
   SearchAutocomplete,
 } from "../SearchAutocomplete";
-import { imdbTitleUrl } from "../../utils";
 
 export interface RatingVsRuntimeChartProps {
   className?: string;
@@ -112,10 +112,10 @@ export function RatingVsRuntimeChart({
       return {
         avgRatings: [],
         genres: [],
+        ids: [],
         runtimes: [],
         titles: [],
         years: [],
-          ids: [],
       };
 
     const allGenres = df.column("genres").values as string[];
@@ -123,14 +123,14 @@ export function RatingVsRuntimeChart({
     const allRatings = df.column("avgRating").values as number[];
     const allTitles = df.column("title").values as string[];
     const allYears = df.column("year").values as number[];
-      const allIds = df.column("id").values as number[];
+    const allIds = df.column("id").values as number[];
 
     const filteredRuntimes: number[] = [];
     const filteredRatings: number[] = [];
     const filteredTitles: string[] = [];
     const filteredGenres: string[] = [];
     const filteredYears: number[] = [];
-      const filteredIds: number[] = [];
+    const filteredIds: number[] = [];
 
     for (let i = 0; i < allGenres.length; i++) {
       const runtime = allRuntimes[i];
@@ -148,7 +148,7 @@ export function RatingVsRuntimeChart({
       filteredTitles.push(allTitles[i]);
       filteredGenres.push(allGenres[i]);
       filteredYears.push(allYears[i]);
-        filteredIds.push(allIds[i]);
+      filteredIds.push(allIds[i]);
     }
 
     return {
@@ -716,7 +716,10 @@ export function RatingVsRuntimeChart({
                 {hoveredPoint.genres.replace(/,/g, " • ")}
               </p>
               <p className="text-[11px] text-purple-300 mt-2">
-                <kbd className="px-1.5 py-0.5 text-[10px] font-semibold text-purple-200 bg-purple-900/30 border border-purple-500/30 rounded">Ctrl</kbd> + click to open on IMDb
+                <kbd className="px-1.5 py-0.5 text-[10px] font-semibold text-purple-200 bg-purple-900/30 border border-purple-500/30 rounded">
+                  Ctrl
+                </kbd>{" "}
+                + click to open on IMDb
               </p>
             </CardBody>
           </Card>
@@ -732,16 +735,17 @@ export function RatingVsRuntimeChart({
             ]}
             title="Rating vs Runtime"
           />
-          <button
-            className="p-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 hover:border-white/30 text-gray-400 hover:text-white transition-colors"
-            onClick={() => {
+          <Button
+            aria-label={isLegendMinimized ? "Show legend" : "Hide legend"}
+            isIconOnly
+            onPress={() => {
               setIsLegendMinimized(!isLegendMinimized);
             }}
-            title={isLegendMinimized ? "Show legend" : "Hide legend"}
-            type="button"
+            size="sm"
+            variant="ghost"
           >
             <Layers className="w-4 h-4" />
-          </button>
+          </Button>
           <Card
             className={`bg-black/40 backdrop-blur-md border-white/10 overflow-hidden transition-all duration-300 ease-in-out ${
               isLegendMinimized

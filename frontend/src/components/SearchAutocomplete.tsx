@@ -1,4 +1,4 @@
-import { Autocomplete, AutocompleteItem, Chip } from "@heroui/react";
+import { Autocomplete, AutocompleteItem, Button, Chip } from "@heroui/react";
 import { Search, X } from "lucide-react";
 import { type Key, useMemo, useState } from "react";
 
@@ -164,14 +164,15 @@ export function SearchAutocomplete({
         ))}
       </Autocomplete>
       {hasActiveSearch && (
-        <button
-          className="p-1.5 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 hover:border-white/30 text-gray-400 hover:text-white transition-colors"
-          onClick={handleClear}
-          title="Clear search"
-          type="button"
+        <Button
+          aria-label="Clear search"
+          isIconOnly
+          onPress={handleClear}
+          size="sm"
+          variant="ghost"
         >
           <X className="w-4 h-4" />
-        </button>
+        </Button>
       )}
     </div>
   );

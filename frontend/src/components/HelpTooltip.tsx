@@ -1,4 +1,11 @@
-import { Card, CardBody, CardHeader, Divider, Tooltip } from "@heroui/react";
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Divider,
+  Tooltip,
+} from "@heroui/react";
 import { CircleHelp } from "lucide-react";
 
 export interface HelpTooltipProps {
@@ -58,13 +65,14 @@ export function HelpTooltip({
       offset={10}
       placement="bottom-end"
     >
-      <button
+      <Button
         aria-label={`Help: ${title}`}
-        className="p-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 text-gray-400 hover:text-white hover:border-white/30 transition-colors cursor-help"
-        type="button"
+        isIconOnly
+        size="sm"
+        variant="ghost"
       >
         <CircleHelp className="w-4 h-4" />
-      </button>
+      </Button>
     </Tooltip>
   );
 }

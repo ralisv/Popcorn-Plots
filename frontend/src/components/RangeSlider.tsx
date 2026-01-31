@@ -1,4 +1,4 @@
-import { Slider } from "@heroui/react";
+import { Button, Slider } from "@heroui/react";
 import { Check, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -102,34 +102,28 @@ export function RangeSlider({
         <span className="font-mono">{formatValue(tempRange[1])}</span>
       </div>
       <div className="flex items-center gap-1">
-        <button
-          className={[
-            "p-1.5 rounded-lg border transition-colors",
-            hasChanges
-              ? "bg-black/40 backdrop-blur-md border-green-500/50 text-green-400 hover:border-green-400 hover:text-green-300"
-              : "bg-black/40 backdrop-blur-md border-white/10 text-gray-500 cursor-not-allowed",
-          ].join(" ")}
-          disabled={!hasChanges}
-          onClick={handleConfirm}
-          title="Apply filter"
-          type="button"
+        <Button
+          aria-label="Apply filter"
+          color={hasChanges ? "success" : "default"}
+          isDisabled={!hasChanges}
+          isIconOnly
+          onPress={handleConfirm}
+          size="sm"
+          variant="ghost"
         >
           <Check className="w-4 h-4" />
-        </button>
-        <button
-          className={[
-            "p-1.5 rounded-lg border transition-colors",
-            isDefault && !hasChanges
-              ? "bg-black/40 backdrop-blur-md border-white/10 text-gray-500 cursor-not-allowed"
-              : "bg-black/40 backdrop-blur-md border-white/10 text-gray-400 hover:border-white/30 hover:text-white",
-          ].join(" ")}
-          disabled={isDefault && !hasChanges}
-          onClick={handleReset}
-          title="Reset to default"
-          type="button"
+        </Button>
+        <Button
+          aria-label="Reset to default"
+          color="default"
+          isDisabled={isDefault && !hasChanges}
+          isIconOnly
+          onPress={handleReset}
+          size="sm"
+          variant="ghost"
         >
           <RotateCcw className="w-4 h-4" />
-        </button>
+        </Button>
       </div>
     </div>
   );

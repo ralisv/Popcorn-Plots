@@ -1,6 +1,6 @@
 import type { DataFrame } from "danfojs";
 
-import { Card, CardBody, Chip, Tooltip } from "@heroui/react";
+import { Button, Card, CardBody, Chip, Tooltip } from "@heroui/react";
 import * as d3 from "d3";
 import { regressionLoess } from "d3-regression";
 import { Layers, TrendingDown, TrendingUp } from "lucide-react";
@@ -690,16 +690,17 @@ export function RatingVsTimeSinceReleaseChart({
             interactions={[{ icon: "👆", text: "Hover points for details" }]}
             title="Normalized Rating vs Time Since Release"
           />
-          <button
-            className="p-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 hover:border-white/30 text-gray-400 hover:text-white transition-colors"
-            onClick={() => {
+          <Button
+            aria-label={isLegendMinimized ? "Show legend" : "Hide legend"}
+            isIconOnly
+            onPress={() => {
               setIsLegendMinimized(!isLegendMinimized);
             }}
-            title={isLegendMinimized ? "Show legend" : "Hide legend"}
-            type="button"
+            size="sm"
+            variant="ghost"
           >
             <Layers className="w-4 h-4" />
-          </button>
+          </Button>
           <Card
             className={`bg-black/40 backdrop-blur-md border-white/10 overflow-hidden transition-all duration-300 ease-in-out ${
               isLegendMinimized

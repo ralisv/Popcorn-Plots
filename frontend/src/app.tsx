@@ -1,6 +1,6 @@
 import type { DataFrame } from "danfojs";
 
-import { Link } from "@heroui/react";
+import { Button, Link } from "@heroui/react";
 import { ChevronUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import packageJson from "../package.json";
@@ -274,22 +274,23 @@ export function App({
       </footer>
 
       {/* Back to Top Button */}
-      <button
+      <Button
         aria-label="Back to top"
         className={[
-          "fixed bottom-6 right-6 z-50 p-3 rounded-full",
-          "bg-gray-700/80 hover:bg-gray-600 backdrop-blur-sm",
-          "text-white shadow-lg shadow-black/25",
+          "fixed bottom-6 right-6 z-50",
           "transition-all duration-300 ease-out",
           showBackToTop
             ? "opacity-100 translate-y-0"
             : "opacity-0 translate-y-4 pointer-events-none",
         ].join(" ")}
-        onClick={scrollToTop}
-        type="button"
+        color="default"
+        isIconOnly
+        onPress={scrollToTop}
+        radius="full"
+        variant="solid"
       >
         <ChevronUp className="w-5 h-5" />
-      </button>
+      </Button>
     </div>
   );
 }
