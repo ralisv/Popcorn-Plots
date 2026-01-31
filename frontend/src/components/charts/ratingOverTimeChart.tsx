@@ -198,12 +198,12 @@ export function RatingOverTimeChart({
   }, []);
 
   // Generate seeded random jitter for each point (stable across re-renders)
-  // Jitter within ±0.4 of a year to spread points horizontally
+  // Jitter within ±0.49 of a year to spread points horizontally
   const jitterValues = useMemo(() => {
     const jitterSeed = 12345;
     return years.map((_, i) => {
       const x = Math.sin(jitterSeed + i * 9999) * 10000;
-      return (x - Math.floor(x)) * 0.8 - 0.4; // Range: -0.4 to +0.4
+      return (x - Math.floor(x)) * 0.98 - 0.49; // Range: -0.49 to +0.49
     });
   }, [years]);
 
