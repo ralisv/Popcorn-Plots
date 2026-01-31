@@ -171,7 +171,9 @@ function LoadingScreen(props: {
     ? 100
     : Math.round((props.ratio ?? 0) * 100);
 
-  const statusText = props.processing ? "Processing data" : "Downloading data";
+  const statusText = props.processing
+    ? "Crunching the numbers"
+    : "Downloading data";
 
   return (
     <div
