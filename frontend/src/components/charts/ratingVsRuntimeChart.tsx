@@ -216,12 +216,12 @@ export function RatingVsRuntimeChart({
   }, []);
 
   // Generate seeded random jitter for each point (stable across re-renders)
-  // Jitter within ±1 minutes to spread points horizontally
+  // Jitter within ±0.49 minutes to spread points horizontally
   const jitterValues = useMemo(() => {
     const jitterSeed = 54321;
     return runtimes.map((_, i) => {
       const x = Math.sin(jitterSeed + i * 9999) * 10000;
-      return (x - Math.floor(x)) * 2 - 1; // Range: -1 to +1 minutes
+      return (x - Math.floor(x)) * 0.98 - 0.49; // Range: -0.49 to +0.49 minutes
     });
   }, [runtimes]);
 
