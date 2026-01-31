@@ -1,5 +1,6 @@
 import type { DataFrame } from "danfojs";
 
+import { Link } from "@heroui/react";
 import { ChevronUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import packageJson from "../package.json";
@@ -212,13 +213,38 @@ export function App({
               <span>Popcorn Plots</span>
               <span className="text-gray-700">•</span>
               <span>{packageJson.description}</span>
+              <span className="text-gray-700">•</span>
+              <span>
+                Data from{" "}
+                <Link
+                  className="text-gray-500"
+                  href="https://grouplens.org/datasets/movielens/32m/"
+                  isExternal
+                  showAnchorIcon
+                  size="sm"
+                  underline="always"
+                >
+                  MovieLens 32M
+                </Link>
+                {" & "}
+                <Link
+                  className="text-gray-500"
+                  href="https://datasets.imdbws.com/"
+                  isExternal
+                  showAnchorIcon
+                  size="sm"
+                  underline="always"
+                >
+                  IMDb
+                </Link>
+              </span>
             </div>
             <div className="flex items-center gap-4">
-              <a
-                className="hover:text-purple-400 transition-colors flex items-center gap-1.5"
+              <Link
+                className="text-sm text-gray-500 flex items-center gap-1.5"
                 href={packageJson.repository}
-                rel="noopener noreferrer"
-                target="_blank"
+                isExternal
+                underline="hover"
               >
                 <svg
                   aria-hidden="true"
@@ -233,15 +259,15 @@ export function App({
                   />
                 </svg>
                 GitHub
-              </a>
-              <a
-                className="hover:text-purple-400 transition-colors"
+              </Link>
+              <Link
+                className="text-sm text-gray-500"
                 href={packageJson.homepage}
-                rel="noopener noreferrer"
-                target="_blank"
+                isExternal
+                underline="hover"
               >
                 Live Demo
-              </a>
+              </Link>
             </div>
           </div>
         </div>
