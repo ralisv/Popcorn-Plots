@@ -1,13 +1,17 @@
 import type { DataFrame } from "danfojs";
 
-import { Card, CardBody, Chip, Input, Tooltip } from "@heroui/react";
+import { Card, CardBody, Chip, Tooltip } from "@heroui/react";
 import * as d3 from "d3";
 import { regressionPoly } from "d3-regression";
-import { Layers, Search, X } from "lucide-react";
+import { Layers } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpTooltip } from "../HelpTooltip";
 import { RangeSlider } from "../RangeSlider";
+import {
+  type MovieSuggestion,
+  SearchAutocomplete,
+} from "../SearchAutocomplete";
 
 export interface RatingOverTimeChartProps {
   className?: string;
@@ -46,8 +50,8 @@ export function RatingOverTimeChart({
   );
 
   // Search state
-  const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
+  const [isExactSelection, setIsExactSelection] = useState(false);
 
   // Legend state
   const [isLegendMinimized, setIsLegendMinimized] = useState(false);
@@ -134,6 +138,16 @@ export function RatingOverTimeChart({
       years: filteredYears,
     };
   }, [allData, xRangeMin, xRangeMax, xFullExtent]);
+
+  // Create movie suggestions for autocomplete
+  const movieSuggestions = useMemo((): MovieSuggestion[] => {
+    return titles.map((title, i) => ({
+      genres: genres[i],
+      rating: avgRatings[i],
+      title,
+      year: years[i],
+    }));
+  }, [titles, genres, avgRatings, years]);
 
   // Handler for range slider changes
   const handleRangeChange = useCallback((min: number, max: number) => {
@@ -373,9 +387,19 @@ export function RatingOverTimeChart({
     const matchedIndices = new Set<number>();
     if (activeSearch.trim()) {
       const searchLower = activeSearch.toLowerCase();
-      for (let i = 0; i < titles.length; i++) {
-        if (titles[i].toLowerCase().includes(searchLower)) {
-          matchedIndices.add(i);
+      if (isExactSelection) {
+        // For exact selection, match the entire title exactly
+        for (let i = 0; i < titles.length; i++) {
+          if (titles[i].toLowerCase() === searchLower) {
+            matchedIndices.add(i);
+          }
+        }
+      } else {
+        // For custom search, use substring matching
+        for (let i = 0; i < titles.length; i++) {
+          if (titles[i].toLowerCase().includes(searchLower)) {
+            matchedIndices.add(i);
+          }
         }
       }
     }
@@ -521,15 +545,16 @@ export function RatingOverTimeChart({
         }
       });
   }, [
+    activeSearch,
     avgRatings,
+    dimensions,
     genres,
+    handleMouseMove,
+    isExactSelection,
+    isZoomed,
     titles,
     years,
-    dimensions,
-    handleMouseMove,
-    isZoomed,
     zoomCenter,
-    activeSearch,
   ]);
 
   return (
@@ -556,38 +581,19 @@ export function RatingOverTimeChart({
         </svg>
 
         {/* Search Input */}
-        <div className="absolute top-4 left-20 flex items-center gap-2">
-          <Input
-            classNames={{
-              base: "w-48",
-              input: "text-white text-sm placeholder:text-gray-400",
-              inputWrapper:
-                "bg-black/40 backdrop-blur-md border-white/10 hover:border-white/30",
+        <div className="absolute top-4 left-20">
+          <SearchAutocomplete
+            hasActiveSearch={!!activeSearch}
+            onClear={() => {
+              setActiveSearch("");
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                setActiveSearch(searchQuery);
-              }
+            onSearch={(query, isExact) => {
+              setActiveSearch(query);
+              setIsExactSelection(isExact);
             }}
-            onValueChange={setSearchQuery}
             placeholder="Search movies..."
-            size="sm"
-            startContent={<Search className="w-4 h-4 text-gray-400" />}
-            value={searchQuery}
+            suggestions={movieSuggestions}
           />
-          {activeSearch && (
-            <button
-              className="p-1.5 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 hover:border-white/30 text-gray-400 hover:text-white transition-colors"
-              onClick={() => {
-                setSearchQuery("");
-                setActiveSearch("");
-              }}
-              title="Clear search"
-              type="button"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
         </div>
 
         {/* Hover Tooltip */}

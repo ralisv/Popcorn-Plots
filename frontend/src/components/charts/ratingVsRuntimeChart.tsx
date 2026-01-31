@@ -1,13 +1,17 @@
 import type { DataFrame } from "danfojs";
 
-import { Card, CardBody, Chip, Input, Tooltip } from "@heroui/react";
+import { Card, CardBody, Chip, Tooltip } from "@heroui/react";
 import * as d3 from "d3";
 import { regressionPoly } from "d3-regression";
-import { Layers, Search, X } from "lucide-react";
+import { Layers } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { HelpTooltip } from "../HelpTooltip";
 import { RangeSlider } from "../RangeSlider";
+import {
+  type MovieSuggestion,
+  SearchAutocomplete,
+} from "../SearchAutocomplete";
 
 export interface RatingVsRuntimeChartProps {
   className?: string;
@@ -63,25 +67,34 @@ export function RatingVsRuntimeChart({
   );
 
   // Search state
-  const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
+  const [isExactSelection, setIsExactSelection] = useState(false);
 
   // Legend state
   const [isLegendMinimized, setIsLegendMinimized] = useState(false);
 
   // Extract all filtered data from DataFrame (individual movies) - without x-range filter
   const allData = useMemo(() => {
-    if (!df) return { avgRatings: [], genres: [], runtimes: [], titles: [] };
+    if (!df)
+      return {
+        avgRatings: [],
+        genres: [],
+        runtimes: [],
+        titles: [],
+        years: [],
+      };
 
     const allGenres = df.column("genres").values as string[];
     const allRuntimes = df.column("runtimeMinutes").values as number[];
     const allRatings = df.column("avgRating").values as number[];
     const allTitles = df.column("title").values as string[];
+    const allYears = df.column("year").values as number[];
 
     const filteredRuntimes: number[] = [];
     const filteredRatings: number[] = [];
     const filteredTitles: string[] = [];
     const filteredGenres: string[] = [];
+    const filteredYears: number[] = [];
 
     for (let i = 0; i < allGenres.length; i++) {
       const runtime = allRuntimes[i];
@@ -98,6 +111,7 @@ export function RatingVsRuntimeChart({
       filteredRatings.push(allRatings[i]);
       filteredTitles.push(allTitles[i]);
       filteredGenres.push(allGenres[i]);
+      filteredYears.push(allYears[i]);
     }
 
     return {
@@ -105,6 +119,7 @@ export function RatingVsRuntimeChart({
       genres: filteredGenres,
       runtimes: filteredRuntimes,
       titles: filteredTitles,
+      years: filteredYears,
     };
   }, [df, selectedGenres]);
 
@@ -116,11 +131,12 @@ export function RatingVsRuntimeChart({
   }, [allData.runtimes]);
 
   // Apply x-range filter to get displayed data
-  const { avgRatings, genres, runtimes, titles } = useMemo(() => {
+  const { avgRatings, genres, runtimes, titles, years } = useMemo(() => {
     const filteredRuntimes: number[] = [];
     const filteredRatings: number[] = [];
     const filteredTitles: string[] = [];
     const filteredGenres: string[] = [];
+    const filteredYears: number[] = [];
 
     for (let i = 0; i < allData.runtimes.length; i++) {
       const runtime = allData.runtimes[i];
@@ -129,6 +145,7 @@ export function RatingVsRuntimeChart({
         filteredRatings.push(allData.avgRatings[i]);
         filteredTitles.push(allData.titles[i]);
         filteredGenres.push(allData.genres[i]);
+        filteredYears.push(allData.years[i]);
       }
     }
 
@@ -137,8 +154,19 @@ export function RatingVsRuntimeChart({
       genres: filteredGenres,
       runtimes: filteredRuntimes,
       titles: filteredTitles,
+      years: filteredYears,
     };
   }, [allData, xRangeMin, xRangeMax]);
+
+  // Create movie suggestions for autocomplete
+  const movieSuggestions = useMemo((): MovieSuggestion[] => {
+    return titles.map((title, i) => ({
+      genres: genres[i],
+      rating: avgRatings[i],
+      title,
+      year: years[i],
+    }));
+  }, [titles, genres, avgRatings, years]);
 
   // Handler for range slider changes
   const handleRangeChange = useCallback((min: number, max: number) => {
@@ -378,9 +406,19 @@ export function RatingVsRuntimeChart({
     const matchedIndices = new Set<number>();
     if (activeSearch.trim()) {
       const searchLower = activeSearch.toLowerCase();
-      for (let i = 0; i < titles.length; i++) {
-        if (titles[i].toLowerCase().includes(searchLower)) {
-          matchedIndices.add(i);
+      if (isExactSelection) {
+        // For exact selection, match the entire title exactly
+        for (let i = 0; i < titles.length; i++) {
+          if (titles[i].toLowerCase() === searchLower) {
+            matchedIndices.add(i);
+          }
+        }
+      } else {
+        // For custom search, use substring matching
+        for (let i = 0; i < titles.length; i++) {
+          if (titles[i].toLowerCase().includes(searchLower)) {
+            matchedIndices.add(i);
+          }
         }
       }
     }
@@ -536,6 +574,7 @@ export function RatingVsRuntimeChart({
     isZoomed,
     zoomCenter,
     activeSearch,
+    isExactSelection,
   ]);
 
   return (
@@ -562,38 +601,19 @@ export function RatingVsRuntimeChart({
         </svg>
 
         {/* Search Input */}
-        <div className="absolute top-4 left-20 flex items-center gap-2">
-          <Input
-            classNames={{
-              base: "w-48",
-              input: "text-white text-sm placeholder:text-gray-400",
-              inputWrapper:
-                "bg-black/40 backdrop-blur-md border-white/10 hover:border-white/30",
+        <div className="absolute top-4 left-20">
+          <SearchAutocomplete
+            hasActiveSearch={!!activeSearch}
+            onClear={() => {
+              setActiveSearch("");
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                setActiveSearch(searchQuery);
-              }
+            onSearch={(query, isExact) => {
+              setActiveSearch(query);
+              setIsExactSelection(isExact);
             }}
-            onValueChange={setSearchQuery}
             placeholder="Search movies..."
-            size="sm"
-            startContent={<Search className="w-4 h-4 text-gray-400" />}
-            value={searchQuery}
+            suggestions={movieSuggestions}
           />
-          {activeSearch && (
-            <button
-              className="p-1.5 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 hover:border-white/30 text-gray-400 hover:text-white transition-colors"
-              onClick={() => {
-                setSearchQuery("");
-                setActiveSearch("");
-              }}
-              title="Clear search"
-              type="button"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
         </div>
 
         {/* Hover Tooltip */}
