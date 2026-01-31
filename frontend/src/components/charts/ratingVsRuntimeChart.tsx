@@ -12,6 +12,7 @@ import {
   type MovieSuggestion,
   SearchAutocomplete,
 } from "../SearchAutocomplete";
+import { imdbTitleUrl } from "../../utils";
 
 export interface RatingVsRuntimeChartProps {
   className?: string;
@@ -39,6 +40,7 @@ export interface RuntimeStats {
 interface HoveredPoint {
   avgRating: number;
   genres: string;
+  imdbId: number;
   runtime: number;
   title: string;
   x: number;
@@ -73,6 +75,37 @@ export function RatingVsRuntimeChart({
   // Legend state
   const [isLegendMinimized, setIsLegendMinimized] = useState(false);
 
+  // Ctrl key state for cursor change
+  const [isCtrlPressed, setIsCtrlPressed] = useState(false);
+
+  // Listen for Ctrl key presses
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.ctrlKey || e.metaKey) {
+        setIsCtrlPressed(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent): void => {
+      if (!e.ctrlKey && !e.metaKey) {
+        setIsCtrlPressed(false);
+      }
+    };
+    const handleBlur = (): void => {
+      setIsCtrlPressed(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    // Handle window blur (user switches tabs/windows)
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
   // Extract all filtered data from DataFrame (individual movies) - without x-range filter
   const allData = useMemo(() => {
     if (!df)
@@ -82,6 +115,7 @@ export function RatingVsRuntimeChart({
         runtimes: [],
         titles: [],
         years: [],
+          ids: [],
       };
 
     const allGenres = df.column("genres").values as string[];
@@ -89,12 +123,14 @@ export function RatingVsRuntimeChart({
     const allRatings = df.column("avgRating").values as number[];
     const allTitles = df.column("title").values as string[];
     const allYears = df.column("year").values as number[];
+      const allIds = df.column("id").values as number[];
 
     const filteredRuntimes: number[] = [];
     const filteredRatings: number[] = [];
     const filteredTitles: string[] = [];
     const filteredGenres: string[] = [];
     const filteredYears: number[] = [];
+      const filteredIds: number[] = [];
 
     for (let i = 0; i < allGenres.length; i++) {
       const runtime = allRuntimes[i];
@@ -112,11 +148,13 @@ export function RatingVsRuntimeChart({
       filteredTitles.push(allTitles[i]);
       filteredGenres.push(allGenres[i]);
       filteredYears.push(allYears[i]);
+        filteredIds.push(allIds[i]);
     }
 
     return {
       avgRatings: filteredRatings,
       genres: filteredGenres,
+      ids: filteredIds,
       runtimes: filteredRuntimes,
       titles: filteredTitles,
       years: filteredYears,
@@ -131,12 +169,13 @@ export function RatingVsRuntimeChart({
   }, [allData.runtimes]);
 
   // Apply x-range filter to get displayed data
-  const { avgRatings, genres, runtimes, titles, years } = useMemo(() => {
+  const { avgRatings, genres, ids, runtimes, titles, years } = useMemo(() => {
     const filteredRuntimes: number[] = [];
     const filteredRatings: number[] = [];
     const filteredTitles: string[] = [];
     const filteredGenres: string[] = [];
     const filteredYears: number[] = [];
+    const filteredIds: number[] = [];
 
     for (let i = 0; i < allData.runtimes.length; i++) {
       const runtime = allData.runtimes[i];
@@ -146,12 +185,14 @@ export function RatingVsRuntimeChart({
         filteredTitles.push(allData.titles[i]);
         filteredGenres.push(allData.genres[i]);
         filteredYears.push(allData.years[i]);
+        filteredIds.push(allData.ids[i]);
       }
     }
 
     return {
       avgRatings: filteredRatings,
       genres: filteredGenres,
+      ids: filteredIds,
       runtimes: filteredRuntimes,
       titles: filteredTitles,
       years: filteredYears,
@@ -234,6 +275,7 @@ export function RatingVsRuntimeChart({
         setHoveredPoint({
           avgRating: avgRatings[closestIdx],
           genres: genres[closestIdx],
+          imdbId: ids[closestIdx],
           runtime: runtimes[closestIdx],
           title: titles[closestIdx],
           x: event.clientX - bbox.left + 15,
@@ -243,7 +285,7 @@ export function RatingVsRuntimeChart({
         setHoveredPoint(null);
       }
     },
-    [runtimes, avgRatings, titles, genres, jitterValues],
+    [runtimes, avgRatings, titles, genres, ids, jitterValues],
   );
 
   useEffect(() => {
@@ -539,7 +581,10 @@ export function RatingVsRuntimeChart({
       .attr("width", innerWidth)
       .attr("height", innerHeight)
       .attr("fill", "transparent")
-      .style("cursor", isZoomed ? "zoom-out" : "zoom-in")
+      .style(
+        "cursor",
+        isCtrlPressed ? "pointer" : isZoomed ? "zoom-out" : "zoom-in",
+      )
       .on("mousemove", (event: MouseEvent) => {
         handleMouseMove(event, xScale, yScale, margin);
       })
@@ -547,6 +592,34 @@ export function RatingVsRuntimeChart({
         setHoveredPoint(null);
       })
       .on("click", (event: MouseEvent) => {
+        // Check for Ctrl+click to open IMDb
+        if (event.ctrlKey || event.metaKey) {
+          // Find closest point to open IMDb link
+          const bbox = containerRef.current?.getBoundingClientRect();
+          if (!bbox) return;
+          const mouseX = event.clientX - bbox.left - margin.left;
+          const mouseY = event.clientY - bbox.top - margin.top;
+
+          let closestIdx = -1;
+          let closestDist = Infinity;
+
+          for (let i = 0; i < runtimes.length; i++) {
+            const px = xScale(runtimes[i] + jitterValues[i]);
+            const py = yScale(avgRatings[i]);
+            const dist = Math.hypot(mouseX - px, mouseY - py);
+
+            if (dist < closestDist && dist < 30) {
+              closestDist = dist;
+              closestIdx = i;
+            }
+          }
+
+          if (closestIdx >= 0) {
+            window.open(imdbTitleUrl(ids[closestIdx]), "_blank");
+          }
+          return;
+        }
+
         if (isZoomed) {
           // Unzoom
           setIsZoomed(false);
@@ -564,17 +637,19 @@ export function RatingVsRuntimeChart({
         }
       });
   }, [
-    avgRatings,
-    genres,
-    titles,
-    runtimes,
-    jitterValues,
-    dimensions,
-    handleMouseMove,
-    isZoomed,
-    zoomCenter,
     activeSearch,
+    avgRatings,
+    dimensions,
+    genres,
+    handleMouseMove,
+    ids,
+    isCtrlPressed,
     isExactSelection,
+    isZoomed,
+    jitterValues,
+    runtimes,
+    titles,
+    zoomCenter,
   ]);
 
   return (
@@ -639,6 +714,9 @@ export function RatingVsRuntimeChart({
               </div>
               <p className="text-[11px] text-gray-400 mt-2">
                 {hoveredPoint.genres.replace(/,/g, " • ")}
+              </p>
+              <p className="text-[11px] text-purple-300 mt-2">
+                <kbd className="px-1.5 py-0.5 text-[10px] font-semibold text-purple-200 bg-purple-900/30 border border-purple-500/30 rounded">Ctrl</kbd> + click to open on IMDb
               </p>
             </CardBody>
           </Card>

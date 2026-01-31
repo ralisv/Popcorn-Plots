@@ -6,6 +6,7 @@ import { regressionPoly } from "d3-regression";
 import { Layers } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { imdbTitleUrl } from "../../utils";
 import { HelpTooltip } from "../HelpTooltip";
 import { RangeSlider } from "../RangeSlider";
 import {
@@ -22,6 +23,7 @@ export interface RatingOverTimeChartProps {
 interface HoveredPoint {
   avgRating: number;
   genres: string;
+  imdbId: number;
   title: string;
   x: number;
   y: number;
@@ -56,19 +58,53 @@ export function RatingOverTimeChart({
   // Legend state
   const [isLegendMinimized, setIsLegendMinimized] = useState(false);
 
+  // Ctrl key state for cursor change
+  const [isCtrlPressed, setIsCtrlPressed] = useState(false);
+
+  // Listen for Ctrl key presses
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.ctrlKey || e.metaKey) {
+        setIsCtrlPressed(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent): void => {
+      if (!e.ctrlKey && !e.metaKey) {
+        setIsCtrlPressed(false);
+      }
+    };
+    const handleBlur = (): void => {
+      setIsCtrlPressed(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    // Handle window blur (user switches tabs/windows)
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
   // Extract all filtered data from DataFrame (without x-range filter)
   const allData = useMemo(() => {
-    if (!df) return { avgRatings: [], genres: [], titles: [], years: [] };
+    if (!df)
+      return { avgRatings: [], genres: [], ids: [], titles: [], years: [] };
 
     const allGenres = df.column("genres").values as string[];
     const allYears = df.column("year").values as number[];
     const allRatings = df.column("avgRating").values as number[];
     const allTitles = df.column("title").values as string[];
+    const allIds = df.column("id").values as number[];
 
     if (selectedGenres.length === 0) {
       return {
         avgRatings: allRatings,
         genres: allGenres,
+        ids: allIds,
         titles: allTitles,
         years: allYears,
       };
@@ -79,6 +115,7 @@ export function RatingOverTimeChart({
     const filteredRatings: number[] = [];
     const filteredTitles: string[] = [];
     const filteredGenres: string[] = [];
+    const filteredIds: number[] = [];
 
     for (let i = 0; i < allGenres.length; i++) {
       const titleGenres = allGenres[i].split(",");
@@ -87,12 +124,14 @@ export function RatingOverTimeChart({
         filteredRatings.push(allRatings[i]);
         filteredTitles.push(allTitles[i]);
         filteredGenres.push(allGenres[i]);
+        filteredIds.push(allIds[i]);
       }
     }
 
     return {
       avgRatings: filteredRatings,
       genres: filteredGenres,
+      ids: filteredIds,
       titles: filteredTitles,
       years: filteredYears,
     };
@@ -112,7 +151,7 @@ export function RatingOverTimeChart({
   }, [xFullExtent.min, xFullExtent.max]);
 
   // Apply x-range filter to get displayed data
-  const { avgRatings, genres, titles, years } = useMemo(() => {
+  const { avgRatings, genres, ids, titles, years } = useMemo(() => {
     const effectiveMin = xRangeMin ?? xFullExtent.min;
     const effectiveMax = xRangeMax ?? xFullExtent.max;
 
@@ -120,6 +159,7 @@ export function RatingOverTimeChart({
     const filteredRatings: number[] = [];
     const filteredTitles: string[] = [];
     const filteredGenres: string[] = [];
+    const filteredIds: number[] = [];
 
     for (let i = 0; i < allData.years.length; i++) {
       const year = allData.years[i];
@@ -128,12 +168,14 @@ export function RatingOverTimeChart({
         filteredRatings.push(allData.avgRatings[i]);
         filteredTitles.push(allData.titles[i]);
         filteredGenres.push(allData.genres[i]);
+        filteredIds.push(allData.ids[i]);
       }
     }
 
     return {
       avgRatings: filteredRatings,
       genres: filteredGenres,
+      ids: filteredIds,
       titles: filteredTitles,
       years: filteredYears,
     };
@@ -215,6 +257,7 @@ export function RatingOverTimeChart({
         setHoveredPoint({
           avgRating: avgRatings[closestIdx],
           genres: genres[closestIdx],
+          imdbId: ids[closestIdx],
           title: titles[closestIdx],
           x: event.clientX - bbox.left + 15,
           y: event.clientY - bbox.top - 10,
@@ -224,7 +267,7 @@ export function RatingOverTimeChart({
         setHoveredPoint(null);
       }
     },
-    [years, avgRatings, titles, genres, jitterValues],
+    [years, avgRatings, titles, genres, ids, jitterValues],
   );
 
   useEffect(() => {
@@ -520,7 +563,10 @@ export function RatingOverTimeChart({
       .attr("width", innerWidth)
       .attr("height", innerHeight)
       .attr("fill", "transparent")
-      .style("cursor", isZoomed ? "zoom-out" : "zoom-in")
+      .style(
+        "cursor",
+        isCtrlPressed ? "pointer" : isZoomed ? "zoom-out" : "zoom-in",
+      )
       .on("mousemove", (event: MouseEvent) => {
         handleMouseMove(event, xScale, yScale, margin);
       })
@@ -528,6 +574,34 @@ export function RatingOverTimeChart({
         setHoveredPoint(null);
       })
       .on("click", (event: MouseEvent) => {
+        // Check for Ctrl+click to open IMDb
+        if (event.ctrlKey || event.metaKey) {
+          // Find closest point to open IMDb link
+          const bbox = containerRef.current?.getBoundingClientRect();
+          if (!bbox) return;
+          const mouseX = event.clientX - bbox.left - margin.left;
+          const mouseY = event.clientY - bbox.top - margin.top;
+
+          let closestIdx = -1;
+          let closestDist = Infinity;
+
+          for (let i = 0; i < years.length; i++) {
+            const px = xScale(years[i] + jitterValues[i]);
+            const py = yScale(avgRatings[i]);
+            const dist = Math.hypot(mouseX - px, mouseY - py);
+
+            if (dist < closestDist && dist < 30) {
+              closestDist = dist;
+              closestIdx = i;
+            }
+          }
+
+          if (closestIdx >= 0) {
+            window.open(imdbTitleUrl(ids[closestIdx]), "_blank");
+          }
+          return;
+        }
+
         if (isZoomed) {
           // Unzoom
           setIsZoomed(false);
@@ -550,8 +624,11 @@ export function RatingOverTimeChart({
     dimensions,
     genres,
     handleMouseMove,
+    ids,
+    isCtrlPressed,
     isExactSelection,
     isZoomed,
+    jitterValues,
     titles,
     years,
     zoomCenter,
@@ -619,6 +696,9 @@ export function RatingOverTimeChart({
               </div>
               <p className="text-[11px] text-gray-400 mt-2">
                 {hoveredPoint.genres.replace(/,/g, " • ")}
+              </p>
+              <p className="text-[11px] text-purple-300 mt-2">
+                Ctrl + click to open on IMDb
               </p>
             </CardBody>
           </Card>

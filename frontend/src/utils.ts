@@ -9,3 +9,8 @@ export function fullNameToDisplayName(fullName: string): string {
 
   return `${firstName.charAt(0)}. ${lastName}`;
 }
+
+export function imdbTitleUrl(imdbId: number): string {
+  const paddedId = imdbId.toString().padStart(7, "0");
+  return `https://www.imdb.com/title/tt${paddedId}/`;
+}
